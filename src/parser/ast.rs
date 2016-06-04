@@ -1,4 +1,5 @@
 use std::vec::Vec;
+use super::keywords::{Operator, Register};
 
 pub struct Program(Vec<Line>);
 
@@ -9,26 +10,11 @@ pub enum Line {
 
 pub struct Label(String);
 
-pub enum Operator {
-    Mov,
-    Jmp,
-    Call,
-    Ret
-    // TODO
-}
-
 pub enum Operand {
     Register(Register),
     Direct(u8),
     IndirectReg(Register),
     IndirectSum(Register, Register)
-}
-
-pub enum Register {
-    R0,
-    R1,
-    R2,
-    // TODO
 }
 
 pub enum Value {
