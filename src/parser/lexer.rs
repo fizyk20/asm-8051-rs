@@ -26,6 +26,8 @@ pub struct Tokenizer {
     tokens: Vec<Token>,
     string: Vec<char>,
     position: usize,
+    curRow: usize,
+    curCol: usize,
     state: TokenizerState
 }
 
@@ -41,6 +43,8 @@ impl Tokenizer {
             tokens: Vec::new(),
             string: s.chars().collect(),
             position: 0,
+            curRow: 1,
+            curCol: 1,
             state: TokenizerState::Ready
         }
     }
@@ -59,7 +63,13 @@ impl Tokenizer {
     }
 
     fn advance(&mut self) {
+        self.curCol += 1;
         self.position += 1;
+    }
+
+    fn newline(&mut self) {
+        self.curCol = 1;
+        self.curRow += 1;
     }
 
     fn handle_ready(&mut self, c: char) -> Option<TokenizerError> {
@@ -72,6 +82,7 @@ impl Tokenizer {
             '\n' => {
                 self.tokens.push(Token::Newline);
                 self.advance();
+                self.newline();
                 None
             },
 
@@ -132,6 +143,7 @@ impl Tokenizer {
             '\n' => {
                 self.state = TokenizerState::Ready;
                 self.advance();
+                self.newline();
                 None
             },
 
