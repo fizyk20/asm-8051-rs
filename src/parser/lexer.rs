@@ -1,22 +1,28 @@
 use std::mem;
 
+#[derive(Clone, Copy)]
+pub struct Position {
+    row: usize,
+    column: usize
+}
+
 /// An enumeration listing possible tokens
 pub enum Token {
-    Identifier(String),
-    Number(String),
-    Colon,
-    Comma,
-    At,
-    Hash,
-    Plus,
-    Newline
+    Identifier(String, Position),
+    Number(String, Position),
+    Colon(Position),
+    Comma(Position),
+    At(Position),
+    Hash(Position),
+    Plus(Position),
+    Newline(Position)
 }
 
 /// Possible tokenizer states
 enum TokenizerState {
     Ready,
-    ReadingNumber(Vec<char>),
-    ReadingIdentifier(Vec<char>),
+    ReadingNumber(Vec<char>, Position),
+    ReadingIdentifier(Vec<char>, Position),
     ReadingComment,
     Invalid
 }
@@ -26,14 +32,13 @@ pub struct Tokenizer {
     tokens: Vec<Token>,
     string: Vec<char>,
     position: usize,
-    curRow: usize,
-    curCol: usize,
+    curPos: Position,
     state: TokenizerState
 }
 
 pub enum TokenizerError {
     GeneralError,
-    UnexpectedCharacter(char)
+    UnexpectedCharacter(Position, char)
 }
 
 impl Tokenizer {
@@ -43,8 +48,7 @@ impl Tokenizer {
             tokens: Vec::new(),
             string: s.chars().collect(),
             position: 0,
-            curRow: 1,
-            curCol: 1,
+            curPos: Position { row: 1, column: 1 },
             state: TokenizerState::Ready
         }
     }
@@ -63,13 +67,13 @@ impl Tokenizer {
     }
 
     fn advance(&mut self) {
-        self.curCol += 1;
+        self.curPos.column += 1;
         self.position += 1;
     }
 
     fn newline(&mut self) {
-        self.curCol = 1;
-        self.curRow += 1;
+        self.curPos.column = 1;
+        self.curPos.row += 1;
     }
 
     fn handle_ready(&mut self, c: char) -> Option<TokenizerError> {
@@ -80,50 +84,50 @@ impl Tokenizer {
             },
 
             '\n' => {
-                self.tokens.push(Token::Newline);
+                self.tokens.push(Token::Newline(self.curPos));
                 self.advance();
                 self.newline();
                 None
             },
 
             '0' ... '9' => {
-                self.state = TokenizerState::ReadingNumber(vec![c]);
+                self.state = TokenizerState::ReadingNumber(vec![c], self.curPos);
                 self.advance();
                 None
             },
 
             '_' | 'a' ... 'z' | 'A' ... 'Z' => {
-                self.state = TokenizerState::ReadingIdentifier(vec![c]);
+                self.state = TokenizerState::ReadingIdentifier(vec![c], self.curPos);
                 self.advance();
                 None
             },
 
             ':' => {
-                self.tokens.push(Token::Colon);
+                self.tokens.push(Token::Colon(self.curPos));
                 self.advance();
                 None
             },
 
             ',' => {
-                self.tokens.push(Token::Comma);
+                self.tokens.push(Token::Comma(self.curPos));
                 self.advance();
                 None
             },
 
             '@' => {
-                self.tokens.push(Token::At);
+                self.tokens.push(Token::At(self.curPos));
                 self.advance();
                 None
             },
 
             '#' => {
-                self.tokens.push(Token::Hash);
+                self.tokens.push(Token::Hash(self.curPos));
                 self.advance();
                 None
             },
 
             '+' => {
-                self.tokens.push(Token::Plus);
+                self.tokens.push(Token::Plus(self.curPos));
                 self.advance();
                 None
             },
@@ -134,7 +138,7 @@ impl Tokenizer {
                 None
             },
 
-            _ => Some(TokenizerError::UnexpectedCharacter(c))
+            _ => Some(TokenizerError::UnexpectedCharacter(self.curPos, c))
         }
     }
 
@@ -154,39 +158,39 @@ impl Tokenizer {
         }
     }
     
-    fn handle_number(&mut self, mut v: Vec<char>, c: char) -> Option<TokenizerError> {
+    fn handle_number(&mut self, mut v: Vec<char>, p: Position, c: char) -> Option<TokenizerError> {
         match c {
             '0' ... '9' | 'a' ... 'f' | 'A' ... 'F' | 'h' | 'H' | 'o' | 'O' => {
                 v.push(c);
-                self.state = TokenizerState::ReadingNumber(v);
+                self.state = TokenizerState::ReadingNumber(v, p);
                 self.advance();
                 None
             },
             
             ' ' | '\t' | '\r' | '\n' | ',' | '+' | '-' | '*' | '/' | ';' => {
-                self.tokens.push(Token::Number(v.into_iter().collect()));
+                self.tokens.push(Token::Number(v.into_iter().collect(), p));
                 self.state = TokenizerState::Ready;
                 None
             },
 
             _ => {
-                self.state = TokenizerState::ReadingNumber(v);
-                Some(TokenizerError::UnexpectedCharacter(c))
+                self.state = TokenizerState::ReadingNumber(v, p);
+                Some(TokenizerError::UnexpectedCharacter(self.curPos, c))
             }
         }
     }
 
-    fn handle_identifier(&mut self, mut v: Vec<char>, c: char) -> Option<TokenizerError> {
+    fn handle_identifier(&mut self, mut v: Vec<char>, p: Position, c: char) -> Option<TokenizerError> {
         match c {
             'a' ... 'z' | 'A' ... 'Z' | '0' ... '9' | '_' => {
                 v.push(c);
-                self.state = TokenizerState::ReadingIdentifier(v);
+                self.state = TokenizerState::ReadingIdentifier(v, p);
                 self.advance();
                 None
             },
 
             _ => {
-                self.tokens.push(Token::Identifier(v.into_iter().collect()));
+                self.tokens.push(Token::Identifier(v.into_iter().collect(), p));
                 self.state = TokenizerState::Ready;
                 self.advance();
                 None
@@ -201,12 +205,12 @@ impl Tokenizer {
                 self.handle_ready(c)
             },
             
-            TokenizerState::ReadingNumber(v) => {
-                self.handle_number(v, c)
+            TokenizerState::ReadingNumber(v, p) => {
+                self.handle_number(v, p, c)
             },
 
-            TokenizerState::ReadingIdentifier(v) => {
-                self.handle_identifier(v, c)
+            TokenizerState::ReadingIdentifier(v, p) => {
+                self.handle_identifier(v, p, c)
             },
 
             TokenizerState::ReadingComment => {
