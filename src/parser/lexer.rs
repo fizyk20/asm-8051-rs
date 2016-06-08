@@ -2,7 +2,7 @@ use std::io::{self, Write};
 use std::str;
 use std::mem;
 use std::error;
-use std::fmt::{Debug, Display};
+use std::fmt::Display;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Position {
@@ -36,20 +36,18 @@ enum TokenizerState {
 /// The tokenizer struct
 pub struct Tokenizer {
     tokens: Vec<Token>,
-    curPos: Position,
+    cur_pos: Position,
     state: TokenizerState
 }
 
 #[derive(Debug)]
 pub enum TokenizerError {
-    GeneralError,
     UnexpectedCharacter(Position, char)
 }
 
 impl Display for TokenizerError {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         match *self {
-            TokenizerError::GeneralError => write!(f, "General tokenizer error"),
             TokenizerError::UnexpectedCharacter(pos, c) =>
                 write!(f, "Unexpected character {} at row {}, column {}", c, pos.row, pos.column)
         }
@@ -59,7 +57,6 @@ impl Display for TokenizerError {
 impl error::Error for TokenizerError {
     fn description(&self) -> &str {
         match *self {
-            TokenizerError::GeneralError => "general tokenizer error",
             TokenizerError::UnexpectedCharacter(_, _) => "unexpected character in tokenized stream"
         }
     }
@@ -74,7 +71,7 @@ impl Tokenizer {
     pub fn new() -> Tokenizer {
         Tokenizer {
             tokens: Vec::new(),
-            curPos: Position { row: 1, column: 1 },
+            cur_pos: Position { row: 1, column: 1 },
             state: TokenizerState::Ready
         }
     }
@@ -84,12 +81,12 @@ impl Tokenizer {
     }
 
     fn advance(&mut self) {
-        self.curPos.column += 1;
+        self.cur_pos.column += 1;
     }
 
     fn newline(&mut self) {
-        self.curPos.column = 1;
-        self.curPos.row += 1;
+        self.cur_pos.column = 1;
+        self.cur_pos.row += 1;
     }
 
     fn handle_ready(&mut self, c: char) -> Result<(), TokenizerError> {
@@ -102,55 +99,55 @@ impl Tokenizer {
 
             '\n' => {
                 self.state = TokenizerState::Ready;
-                self.tokens.push(Token::Newline(self.curPos));
+                self.tokens.push(Token::Newline(self.cur_pos));
                 self.advance();
                 self.newline();
                 Ok(())
             },
 
             '0' ... '9' => {
-                self.state = TokenizerState::ReadingNumber(vec![c], self.curPos);
+                self.state = TokenizerState::ReadingNumber(vec![c], self.cur_pos);
                 self.advance();
                 Ok(())
             },
 
             '_' | 'a' ... 'z' | 'A' ... 'Z' => {
-                self.state = TokenizerState::ReadingIdentifier(vec![c], self.curPos);
+                self.state = TokenizerState::ReadingIdentifier(vec![c], self.cur_pos);
                 self.advance();
                 Ok(())
             },
 
             ':' => {
                 self.state = TokenizerState::Ready;
-                self.tokens.push(Token::Colon(self.curPos));
+                self.tokens.push(Token::Colon(self.cur_pos));
                 self.advance();
                 Ok(())
             },
 
             ',' => {
                 self.state = TokenizerState::Ready;
-                self.tokens.push(Token::Comma(self.curPos));
+                self.tokens.push(Token::Comma(self.cur_pos));
                 self.advance();
                 Ok(())
             },
 
             '@' => {
                 self.state = TokenizerState::Ready;
-                self.tokens.push(Token::At(self.curPos));
+                self.tokens.push(Token::At(self.cur_pos));
                 self.advance();
                 Ok(())
             },
 
             '#' => {
                 self.state = TokenizerState::Ready;
-                self.tokens.push(Token::Hash(self.curPos));
+                self.tokens.push(Token::Hash(self.cur_pos));
                 self.advance();
                 Ok(())
             },
 
             '+' => {
                 self.state = TokenizerState::Ready;
-                self.tokens.push(Token::Plus(self.curPos));
+                self.tokens.push(Token::Plus(self.cur_pos));
                 self.advance();
                 Ok(())
             },
@@ -163,7 +160,7 @@ impl Tokenizer {
 
             _ => {
                 self.state = TokenizerState::Ready;
-                Err(TokenizerError::UnexpectedCharacter(self.curPos, c))
+                Err(TokenizerError::UnexpectedCharacter(self.cur_pos, c))
             }
         }
     }
@@ -202,7 +199,7 @@ impl Tokenizer {
 
             _ => {
                 self.state = TokenizerState::ReadingNumber(v, p);
-                Err(TokenizerError::UnexpectedCharacter(self.curPos, c))
+                Err(TokenizerError::UnexpectedCharacter(self.cur_pos, c))
             }
         }
     }
