@@ -41,17 +41,41 @@ pub enum ParseError {
 pub type Result<T> = ::std::result::Result<T, ParseError>;
 
 pub struct Parser {
-    tokens: Vec<lexer::Token>
+    tokens: Vec<lexer::Token>,
+    position: usize,
+    saved_positions: Vec<usize>
 }
 
 impl Parser {
 
+    fn current_token(&self) -> &lexer::Token {
+        &self.tokens[self.position]
+    }
+
+    fn advance(&mut self) {
+        self.position += 1;
+    }
+
+    fn save_pos(&mut self) {
+        self.saved_positions.push(self.position);
+    }
+
+    fn rollback(&mut self) {
+        if let Some(p) = self.saved_positions.pop() {
+            self.position = p;
+        }
+    }
+
+    fn discard_saved_pos(&mut self) {
+        self.saved_positions.pop();
+    }
+
     fn expect_newline(&mut self) -> Result<()> {
-        if !self.tokens[0].is_newline() {
+        if !self.current_token().is_newline() {
             Err(ParseError::GeneralError)
         }
         else {
-            self.tokens.remove(0);
+            self.advance();
             Ok(())
         }
     }
@@ -59,7 +83,7 @@ impl Parser {
     pub fn parse_program(&mut self) -> Result<Program> {
         let mut lines = Vec::new();
 
-        while self.tokens.len() > 0 {
+        while self.position < self.tokens.len() {
             let line = try! { self.parse_line() };
             lines.push(line);
         }
@@ -68,6 +92,8 @@ impl Parser {
     }
 
     pub fn parse_line(&mut self) -> Result<Line> {
+        self.save_pos();
+
         let result_label = self.parse_label();
         
         let label;
@@ -87,8 +113,15 @@ impl Parser {
             lbody = None;
         }
 
-        try! { self.expect_newline() };
-        Ok(Line(label, lbody))
+        let newline_result = self.expect_newline();
+        if let Err(e) = newline_result {
+            self.rollback();
+            Err(e)
+        }
+        else {
+            self.discard_saved_pos();
+            Ok(Line(label, lbody))
+        }
     }
 
     pub fn parse_label(&mut self) -> Result<Label> {
