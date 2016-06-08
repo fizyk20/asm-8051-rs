@@ -52,8 +52,14 @@ impl Parser {
         &self.tokens[self.position]
     }
 
-    fn advance(&mut self) {
-        self.position += 1;
+    fn advance(&mut self) -> Result<()> {
+        if self.position < self.tokens.len() - 1 {
+            self.position += 1;
+            Ok(())
+        }
+        else {
+            Err(ParseError::GeneralError)
+        }
     }
 
     fn save_pos(&mut self) {
@@ -71,12 +77,12 @@ impl Parser {
     }
 
     fn expect_newline(&mut self) -> Result<()> {
-        if !self.current_token().is_newline() {
-            Err(ParseError::GeneralError)
-        }
-        else {
+        if self.current_token().is_newline() {
             self.advance();
             Ok(())
+        }
+        else {
+            Err(ParseError::GeneralError)
         }
     }
 
@@ -125,7 +131,24 @@ impl Parser {
     }
 
     pub fn parse_label(&mut self) -> Result<Label> {
-        Err(ParseError::GeneralError)
+        let label_txt =
+            if self.current_token().is_identifier() {
+                self.current_token().get_string().unwrap()
+            }
+            else {
+                return Err(ParseError::GeneralError);
+            };
+        self.save_pos();
+
+        self.advance();
+        if !self.current_token().is_colon() {
+            self.rollback();
+            return Err(ParseError::GeneralError);
+        }
+
+        self.advance();
+        self.discard_saved_pos();
+        Ok(Label(label_txt))
     }
 
     pub fn parse_line_body(&mut self) -> Result<LineBody> {

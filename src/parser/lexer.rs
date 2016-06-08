@@ -25,6 +25,27 @@ pub enum Token {
 
 impl Token {
 
+    pub fn is_identifier(&self) -> bool {
+        match *self {
+            Token::Identifier(_, _) => true,
+            _ => false
+        }
+    }
+
+    pub fn is_number(&self) -> bool {
+        match *self {
+            Token::Number(_, _) => true,
+            _ => false
+        }
+    }
+
+    pub fn is_colon(&self) -> bool {
+        match *self {
+            Token::Colon(_) => true,
+            _ => false
+        }
+    }
+
     pub fn is_newline(&self) -> bool {
         match *self {
             Token::Newline(_) => true,
@@ -42,6 +63,14 @@ impl Token {
             Token::Hash(p) => p,
             Token::Plus(p) => p,
             Token::Newline(p) => p
+        }
+    }
+
+    pub fn get_string(&self) -> Option<String> {
+        match *self {
+            Token::Identifier(ref s, _) => Some(s.clone()),
+            Token::Number(ref s, _) => Some(s.clone()),
+            _ => None
         }
     }
 
