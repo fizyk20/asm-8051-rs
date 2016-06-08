@@ -35,6 +35,11 @@ pub enum Value {
 
 #[derive(Clone, Debug)]
 pub enum ParseError {
+    UnexpectedEof(lexer::Token),
+    ExpectedNewline(lexer::Position),
+    ExpectedIdentifier(lexer::Position),
+    ExpectedColon(lexer::Position),
+    InvalidLineBody(lexer::Position),
     GeneralError
 }
 
@@ -58,7 +63,7 @@ impl Parser {
             Ok(())
         }
         else {
-            Err(ParseError::GeneralError)
+            Err(ParseError::UnexpectedEof(self.current_token().clone()))
         }
     }
 
@@ -82,7 +87,7 @@ impl Parser {
             Ok(())
         }
         else {
-            Err(ParseError::GeneralError)
+            Err(ParseError::ExpectedNewline(self.current_token().get_position()))
         }
     }
 
@@ -97,7 +102,7 @@ impl Parser {
         Ok(Program(lines))
     }
 
-    pub fn parse_line(&mut self) -> Result<Line> {
+    fn parse_line(&mut self) -> Result<Line> {
         self.save_pos();
 
         let result_label = self.parse_label();
@@ -130,20 +135,20 @@ impl Parser {
         }
     }
 
-    pub fn parse_label(&mut self) -> Result<Label> {
+    fn parse_label(&mut self) -> Result<Label> {
         let label_txt =
             if self.current_token().is_identifier() {
                 self.current_token().get_string().unwrap()
             }
             else {
-                return Err(ParseError::GeneralError);
+                return Err(ParseError::ExpectedIdentifier(self.current_token().get_position()));
             };
         self.save_pos();
 
         self.advance();
         if !self.current_token().is_colon() {
             self.rollback();
-            return Err(ParseError::GeneralError);
+            return Err(ParseError::ExpectedColon(self.current_token().get_position()));
         }
 
         self.advance();
@@ -151,7 +156,25 @@ impl Parser {
         Ok(Label(label_txt))
     }
 
-    pub fn parse_line_body(&mut self) -> Result<LineBody> {
+    fn parse_line_body(&mut self) -> Result<LineBody> {
+        let result = self.parse_code_line();
+        if result.is_ok() {
+            return result;
+        }
+
+        let result = self.parse_value_def();
+        if result.is_ok() {
+            return result;
+        }
+
+        Err(ParseError::InvalidLineBody(self.current_token().get_position()))
+    }
+
+    fn parse_code_line(&mut self) -> Result<LineBody> {
+        Err(ParseError::GeneralError)
+    }
+
+    fn parse_value_def(&mut self) -> Result<LineBody> {
         Err(ParseError::GeneralError)
     }
 
