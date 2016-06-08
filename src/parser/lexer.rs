@@ -1,5 +1,8 @@
+use std::io::{self, Write};
+use std::str;
 use std::mem;
-use std::fmt::Debug;
+use std::error;
+use std::fmt::{Debug, Display};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Position {
@@ -33,8 +36,6 @@ enum TokenizerState {
 /// The tokenizer struct
 pub struct Tokenizer {
     tokens: Vec<Token>,
-    string: Vec<char>,
-    position: usize,
     curPos: Position,
     state: TokenizerState
 }
@@ -45,24 +46,37 @@ pub enum TokenizerError {
     UnexpectedCharacter(Position, char)
 }
 
-impl Tokenizer {
+impl Display for TokenizerError {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        match *self {
+            TokenizerError::GeneralError => write!(f, "General tokenizer error"),
+            TokenizerError::UnexpectedCharacter(pos, c) =>
+                write!(f, "Unexpected character {} at row {}, column {}", c, pos.row, pos.column)
+        }
+    }
+}
 
-    pub fn new(s: &str) -> Tokenizer {
-        Tokenizer {
-            tokens: Vec::new(),
-            string: s.chars().collect(),
-            position: 0,
-            curPos: Position { row: 1, column: 1 },
-            state: TokenizerState::Ready
+impl error::Error for TokenizerError {
+    fn description(&self) -> &str {
+        match *self {
+            TokenizerError::GeneralError => "general tokenizer error",
+            TokenizerError::UnexpectedCharacter(_, _) => "unexpected character in tokenized stream"
         }
     }
 
-    fn current_char(&self) -> char {
-        self.string[self.position]
+    fn cause(&self) -> Option<&error::Error> {
+        None
     }
+}
 
-    fn eof(&self) -> bool {
-        self.position >= self.string.len()
+impl Tokenizer {
+
+    pub fn new() -> Tokenizer {
+        Tokenizer {
+            tokens: Vec::new(),
+            curPos: Position { row: 1, column: 1 },
+            state: TokenizerState::Ready
+        }
     }
 
     fn get_tokens(self) -> Vec<Token> {
@@ -71,7 +85,6 @@ impl Tokenizer {
 
     fn advance(&mut self) {
         self.curPos.column += 1;
-        self.position += 1;
     }
 
     fn newline(&mut self) {
@@ -79,12 +92,12 @@ impl Tokenizer {
         self.curPos.row += 1;
     }
 
-    fn handle_ready(&mut self, c: char) -> Option<TokenizerError> {
+    fn handle_ready(&mut self, c: char) -> Result<(), TokenizerError> {
         match c {
             ' ' | '\t' | '\r' => {
                 self.state = TokenizerState::Ready;
                 self.advance();
-                None
+                Ok(())
             },
 
             '\n' => {
@@ -92,127 +105,126 @@ impl Tokenizer {
                 self.tokens.push(Token::Newline(self.curPos));
                 self.advance();
                 self.newline();
-                None
+                Ok(())
             },
 
             '0' ... '9' => {
                 self.state = TokenizerState::ReadingNumber(vec![c], self.curPos);
                 self.advance();
-                None
+                Ok(())
             },
 
             '_' | 'a' ... 'z' | 'A' ... 'Z' => {
                 self.state = TokenizerState::ReadingIdentifier(vec![c], self.curPos);
                 self.advance();
-                None
+                Ok(())
             },
 
             ':' => {
                 self.state = TokenizerState::Ready;
                 self.tokens.push(Token::Colon(self.curPos));
                 self.advance();
-                None
+                Ok(())
             },
 
             ',' => {
                 self.state = TokenizerState::Ready;
                 self.tokens.push(Token::Comma(self.curPos));
                 self.advance();
-                None
+                Ok(())
             },
 
             '@' => {
                 self.state = TokenizerState::Ready;
                 self.tokens.push(Token::At(self.curPos));
                 self.advance();
-                None
+                Ok(())
             },
 
             '#' => {
                 self.state = TokenizerState::Ready;
                 self.tokens.push(Token::Hash(self.curPos));
                 self.advance();
-                None
+                Ok(())
             },
 
             '+' => {
                 self.state = TokenizerState::Ready;
                 self.tokens.push(Token::Plus(self.curPos));
                 self.advance();
-                None
+                Ok(())
             },
 
             ';' => {
                 self.state = TokenizerState::ReadingComment;
                 self.advance();
-                None
+                Ok(())
             },
 
             _ => {
                 self.state = TokenizerState::Ready;
-                Some(TokenizerError::UnexpectedCharacter(self.curPos, c))
+                Err(TokenizerError::UnexpectedCharacter(self.curPos, c))
             }
         }
     }
 
-    fn handle_comment(&mut self, c: char) -> Option<TokenizerError> {
+    fn handle_comment(&mut self, c: char) -> Result<(), TokenizerError> {
         match c {
             '\n' => {
                 self.state = TokenizerState::Ready;
                 self.advance();
                 self.newline();
-                None
+                Ok(())
             },
 
             _ => {
                 self.state = TokenizerState::ReadingComment;
                 self.advance();
-                None
+                Ok(())
             }
         }
     }
     
-    fn handle_number(&mut self, mut v: Vec<char>, p: Position, c: char) -> Option<TokenizerError> {
+    fn handle_number(&mut self, mut v: Vec<char>, p: Position, c: char) -> Result<(), TokenizerError> {
         match c {
             '0' ... '9' | 'a' ... 'f' | 'A' ... 'F' | 'h' | 'H' | 'o' | 'O' => {
                 v.push(c);
                 self.state = TokenizerState::ReadingNumber(v, p);
                 self.advance();
-                None
+                Ok(())
             },
             
             ' ' | '\t' | '\r' | '\n' | ',' | '+' | '-' | '*' | '/' | ';' => {
                 self.tokens.push(Token::Number(v.into_iter().collect(), p));
                 self.state = TokenizerState::Ready;
-                None
+                self.consume_char(c)
             },
 
             _ => {
                 self.state = TokenizerState::ReadingNumber(v, p);
-                Some(TokenizerError::UnexpectedCharacter(self.curPos, c))
+                Err(TokenizerError::UnexpectedCharacter(self.curPos, c))
             }
         }
     }
 
-    fn handle_identifier(&mut self, mut v: Vec<char>, p: Position, c: char) -> Option<TokenizerError> {
+    fn handle_identifier(&mut self, mut v: Vec<char>, p: Position, c: char) -> Result<(), TokenizerError> {
         match c {
             'a' ... 'z' | 'A' ... 'Z' | '0' ... '9' | '_' => {
                 v.push(c);
                 self.state = TokenizerState::ReadingIdentifier(v, p);
                 self.advance();
-                None
+                Ok(())
             },
 
             _ => {
                 self.tokens.push(Token::Identifier(v.into_iter().collect(), p));
                 self.state = TokenizerState::Ready;
-                None
+                self.consume_char(c)
             }
         }
     }
 
-    pub fn consume_char(&mut self) -> Option<TokenizerError> {
-        let c = self.current_char();
+    pub fn consume_char(&mut self, c: char) -> Result<(), TokenizerError> {
         match mem::replace(&mut self.state, TokenizerState::Invalid) {
             TokenizerState::Ready => {
                 self.handle_ready(c)
@@ -234,18 +246,38 @@ impl Tokenizer {
         }
     }
 
-    pub fn tokenize(text: &str) -> Result<Vec<Token>, TokenizerError> {
-        let mut tokenizer = Tokenizer::new(text);
-        loop {
-            if tokenizer.eof() {
-                return Ok(tokenizer.get_tokens());
-            }
-            if let Some(err) = tokenizer.consume_char() {
-                return Err(err);
-            }
+    pub fn consume_text(&mut self, text: &str) -> Result<(), TokenizerError> {
+        for c in text.chars() {
+            try! { self.consume_char(c) };
         }
+        Ok(())
     }
 
+    pub fn tokenize(text: &str) -> Result<Vec<Token>, TokenizerError> {
+        let mut tokenizer = Tokenizer::new();
+        try! { tokenizer.consume_text(text) };
+        Ok(tokenizer.get_tokens())
+    }
+
+}
+
+impl Write for Tokenizer {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let chars = str::from_utf8(buf);
+        if let Err(e) = chars {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, e));
+        }
+        let text = chars.unwrap();
+        let result = self.consume_text(text);
+        if let Err(e) = result {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, e));
+        }
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }
 
 #[cfg(test)]
