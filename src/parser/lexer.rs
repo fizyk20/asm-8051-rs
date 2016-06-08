@@ -11,7 +11,7 @@ pub struct Position {
 }
 
 /// An enumeration listing possible tokens
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Token {
     Identifier(String, Position),
     Number(String, Position),
@@ -21,6 +21,30 @@ pub enum Token {
     Hash(Position),
     Plus(Position),
     Newline(Position)
+}
+
+impl Token {
+
+    pub fn is_newline(&self) -> bool {
+        match *self {
+            Token::Newline(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn get_position(&self) -> Position {
+        match *self {
+            Token::Identifier(_, p) => p,
+            Token::Number(_, p) => p,
+            Token::Colon(p) => p,
+            Token::Comma(p) => p,
+            Token::At(p) => p,
+            Token::Hash(p) => p,
+            Token::Plus(p) => p,
+            Token::Newline(p) => p
+        }
+    }
+
 }
 
 /// Possible tokenizer states

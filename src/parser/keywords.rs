@@ -1,6 +1,4 @@
-use std::fmt::{Display, Debug};
-
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Operator {
     Mov,
     Jmp,
@@ -9,7 +7,7 @@ pub enum Operator {
     // TODO
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Register {
     R0,
     R1,
