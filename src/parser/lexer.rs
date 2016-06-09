@@ -67,6 +67,13 @@ impl Token {
         }
     }
 
+    pub fn is_plus(&self) -> bool {
+        match *self {
+            Token::Plus(_) => true,
+            _ => false
+        }
+    }
+
     pub fn is_newline(&self) -> bool {
         match *self {
             Token::Newline(_) => true,

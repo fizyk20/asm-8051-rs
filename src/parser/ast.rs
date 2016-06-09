@@ -44,6 +44,7 @@ pub enum ParseError {
     ExpectedComma(lexer::Position),
     ExpectedAt(lexer::Position),
     ExpectedHash(lexer::Position),
+    ExpectedPlus(lexer::Position),
     InvalidLineBody(lexer::Position),
     InvalidMnemonic(String, lexer::Position),
     InvalidOperand(lexer::Token),
@@ -145,6 +146,17 @@ impl Parser {
         }
         else {
             Err(ParseError::ExpectedHash(cur_tok.get_position()))
+        }
+    }
+
+    fn expect_plus(&mut self) -> Result<()> {
+        let cur_tok = try! { self.current_token() };
+        if cur_tok.is_plus() {
+            self.advance();
+            Ok(())
+        }
+        else {
+            Err(ParseError::ExpectedPlus(cur_tok.get_position()))
         }
     }
 
@@ -361,7 +373,7 @@ impl Parser {
 
         let res_register = self.parse_register();
         if let Ok(result) = res_register {
-            return Ok(result);
+            return Ok(Operand::Register(result));
         }
 
         let res_direct = self.parse_direct();
@@ -379,8 +391,27 @@ impl Parser {
             self.rollback();
             return Err(e);
         }
-        self.rollback();
-        Err(ParseError::GeneralError)
+        let register1 = self.parse_register();
+        if let Err(e) = register1 {
+            self.rollback();
+            return Err(e);
+        }
+        let register1 = register1.unwrap();
+
+        if let Err(e) = self.expect_plus() {
+            self.rollback();
+            return Err(e);
+        }
+
+        let register2 = self.parse_register();
+        if let Err(e) = register2 {
+            self.rollback();
+            return Err(e);
+        }
+        let register2 = register2.unwrap();
+
+        self.discard_saved_pos();
+        Ok(Operand::IndirectSum(register1, register2))
     }
     
     fn parse_indirect(&mut self) -> Result<Operand> {
@@ -389,8 +420,15 @@ impl Parser {
             self.rollback();
             return Err(e);
         }
-        self.rollback();
-        Err(ParseError::GeneralError)
+        let register = self.parse_register();
+        if let Err(e) = register {
+            self.rollback();
+            return Err(e);
+        }
+
+        let register = register.unwrap();
+        self.discard_saved_pos();
+        Ok(Operand::IndirectReg(register))
     }
     
     fn parse_immediate(&mut self) -> Result<Operand> {
@@ -427,12 +465,12 @@ impl Parser {
         Err(ParseError::GeneralError)
     }
     
-    fn parse_register(&mut self) -> Result<Operand> {
+    fn parse_register(&mut self) -> Result<Register> {
         let cur_tok = try! { self.current_token() };
         if cur_tok.is_identifier() {
             if let Ok(reg_result) = cur_tok.get_string().unwrap().parse() {
                 self.advance();
-                Ok(Operand::Register(reg_result))
+                Ok(reg_result)
             }
             else {
                 Err(ParseError::InvalidRegister(cur_tok))
