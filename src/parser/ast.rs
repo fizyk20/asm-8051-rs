@@ -43,6 +43,7 @@ pub enum ParseError {
     ExpectedComma(lexer::Position),
     InvalidLineBody(lexer::Position),
     InvalidMnemonic(String, lexer::Position),
+    InvalidOperand(lexer::Token),
     GeneralError
 }
 
@@ -266,8 +267,53 @@ impl Parser {
     }
 
     fn parse_operand(&mut self) -> Result<Operand> {
-        self.advance();
-        Ok(Operand::Direct(0))
+        let res_indirect_sum = self.parse_indirect_sum();
+        if let Ok(result) = res_indirect_sum {
+            return Ok(result);
+        }
+
+        let res_indirect = self.parse_indirect();
+        if let Ok(result) = res_indirect {
+            return Ok(result);
+        }
+
+        let res_immediate = self.parse_immediate();
+        if let Ok(result) = res_immediate {
+            return Ok(result);
+        }
+
+        let res_register = self.parse_register();
+        if let Ok(result) = res_register {
+            return Ok(result);
+        }
+
+        let res_direct = self.parse_direct();
+        if let Ok(result) = res_direct {
+            return Ok(result);
+        }
+
+        let cur_tok = try! { self.current_token() };
+        Err(ParseError::InvalidOperand(cur_tok))
+    }
+    
+    fn parse_indirect_sum(&mut self) -> Result<Operand> {
+        Err(ParseError::GeneralError)
+    }
+    
+    fn parse_indirect(&mut self) -> Result<Operand> {
+        Err(ParseError::GeneralError)
+    }
+    
+    fn parse_immediate(&mut self) -> Result<Operand> {
+        Err(ParseError::GeneralError)
+    }
+    
+    fn parse_register(&mut self) -> Result<Operand> {
+        Err(ParseError::GeneralError)
+    }
+
+    fn parse_direct(&mut self) -> Result<Operand> {
+        Err(ParseError::GeneralError)
     }
 
     fn parse_value_def(&mut self) -> Result<LineBody> {
