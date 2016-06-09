@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::str::FromStr;
 use std::error;
 use super::lexer;
 use super::keywords::{Operator, Register};
@@ -41,6 +42,7 @@ pub enum ParseError {
     ExpectedColon(lexer::Position),
     ExpectedComma(lexer::Position),
     InvalidLineBody(lexer::Position),
+    InvalidMnemonic(String, lexer::Position),
     GeneralError
 }
 
@@ -224,7 +226,17 @@ impl Parser {
     }
 
     fn parse_operator(&mut self) -> Result<Operator> {
-        Err(ParseError::GeneralError)
+        if !self.current_token().is_identifier() {
+            return Err(ParseError::ExpectedIdentifier(self.current_token().get_position()));
+        }
+
+        let oper_str = self.current_token().get_string().unwrap();
+        let operator = oper_str.parse();
+        if operator.is_err() {
+            return Err(ParseError::InvalidMnemonic(oper_str, self.current_token().get_position()));
+        }
+
+        Ok(operator.unwrap())
     }
 
     fn parse_operand(&mut self) -> Result<Operand> {
