@@ -56,18 +56,26 @@ pub struct Parser {
 
 impl Parser {
 
-    fn current_token(&self) -> &lexer::Token {
-        &self.tokens[self.position]
+    pub fn parse(tokens: Vec<lexer::Token>) -> Result<Program> {
+        let mut parser = Parser {
+            tokens: tokens,
+            position: 0,
+            saved_positions: Vec::new()
+        };
+        parser.parse_program()
     }
 
-    fn advance(&mut self) -> Result<()> {
-        if self.position < self.tokens.len() - 1 {
-            self.position += 1;
-            Ok(())
+    fn current_token(&self) -> Result<lexer::Token> {
+        if self.position < self.tokens.len() {
+            Ok(self.tokens[self.position].clone())
         }
         else {
-            Err(ParseError::UnexpectedEof(self.current_token().clone()))
+            Err(ParseError::UnexpectedEof(self.tokens[self.tokens.len()-1].clone()))
         }
+    }
+
+    fn advance(&mut self) {
+        self.position += 1;
     }
 
     fn save_pos(&mut self) {
@@ -85,26 +93,33 @@ impl Parser {
     }
 
     fn expect_newline(&mut self) -> Result<()> {
-        if self.current_token().is_newline() {
-            self.advance();
-            Ok(())
-        }
-        else {
-            Err(ParseError::ExpectedNewline(self.current_token().get_position()))
+        let cur_tok = self.current_token();
+        match cur_tok {
+            Err(ParseError::UnexpectedEof(_)) => Ok(()),
+            Err(e) => Err(e),
+            Ok(tok) => 
+                if tok.is_newline() {
+                    self.advance();
+                    Ok(())
+                }
+                else {
+                    Err(ParseError::ExpectedNewline(try! { self.current_token() }.get_position()))
+                }
         }
     }
 
     fn expect_comma(&mut self) -> Result<()> {
-        if self.current_token().is_comma() {
+        let cur_tok = try! { self.current_token() };
+        if cur_tok.is_comma() {
             self.advance();
             Ok(())
         }
         else {
-            Err(ParseError::ExpectedComma(self.current_token().get_position()))
+            Err(ParseError::ExpectedComma(cur_tok.get_position()))
         }
     }
 
-    pub fn parse_program(&mut self) -> Result<Program> {
+    fn parse_program(&mut self) -> Result<Program> {
         let mut lines = Vec::new();
 
         while self.position < self.tokens.len() {
@@ -149,19 +164,21 @@ impl Parser {
     }
 
     fn parse_label(&mut self) -> Result<Label> {
+        let cur_tok = try! { self.current_token() };
         let label_txt =
-            if self.current_token().is_identifier() {
-                self.current_token().get_string().unwrap()
+            if cur_tok.is_identifier() {
+                cur_tok.get_string().unwrap()
             }
             else {
-                return Err(ParseError::ExpectedIdentifier(self.current_token().get_position()));
+                return Err(ParseError::ExpectedIdentifier(cur_tok.get_position()));
             };
         self.save_pos();
 
         self.advance();
-        if !self.current_token().is_colon() {
+        let cur_tok = try! { self.current_token() };
+        if !cur_tok.is_colon() {
             self.rollback();
-            return Err(ParseError::ExpectedColon(self.current_token().get_position()));
+            return Err(ParseError::ExpectedColon(cur_tok.get_position()));
         }
 
         self.advance();
@@ -180,7 +197,8 @@ impl Parser {
             return result;
         }
 
-        Err(ParseError::InvalidLineBody(self.current_token().get_position()))
+        let cur_tok = try! { self.current_token() };
+        Err(ParseError::InvalidLineBody(cur_tok.get_position()))
     }
 
     fn parse_code_line(&mut self) -> Result<LineBody> {
@@ -226,25 +244,47 @@ impl Parser {
     }
 
     fn parse_operator(&mut self) -> Result<Operator> {
-        if !self.current_token().is_identifier() {
-            return Err(ParseError::ExpectedIdentifier(self.current_token().get_position()));
+        let cur_tok = try! { self.current_token() };
+        if !cur_tok.is_identifier() {
+            return Err(ParseError::ExpectedIdentifier(cur_tok.get_position()));
         }
 
-        let oper_str = self.current_token().get_string().unwrap();
+        let oper_str = cur_tok.get_string().unwrap();
         let operator = oper_str.parse();
         if operator.is_err() {
-            return Err(ParseError::InvalidMnemonic(oper_str, self.current_token().get_position()));
+            return Err(ParseError::InvalidMnemonic(oper_str, cur_tok.get_position()));
         }
 
+        self.advance();
         Ok(operator.unwrap())
     }
 
     fn parse_operand(&mut self) -> Result<Operand> {
-        Err(ParseError::GeneralError)
+        self.advance();
+        Ok(Operand::Direct(0))
     }
 
     fn parse_value_def(&mut self) -> Result<LineBody> {
         Err(ParseError::GeneralError)
     }
 
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use super::super::lexer::Tokenizer;
+
+    #[test]
+    fn test_parser() {
+        let program = "mov A, 20h\nret";
+        let tokens = Tokenizer::tokenize(program);
+        assert!(tokens.is_ok());
+        let tokens = tokens.unwrap();
+        println!("{:?}", tokens);
+
+        let parsed_program = Parser::parse(tokens);
+        assert!(parsed_program.is_ok());
+        println!("{:?}", parsed_program);
+    }
 }
