@@ -53,6 +53,20 @@ impl Token {
         }
     }
 
+    pub fn is_at(&self) -> bool {
+        match *self {
+            Token::At(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn is_hash(&self) -> bool {
+        match *self {
+            Token::Hash(_) => true,
+            _ => false
+        }
+    }
+
     pub fn is_newline(&self) -> bool {
         match *self {
             Token::Newline(_) => true,

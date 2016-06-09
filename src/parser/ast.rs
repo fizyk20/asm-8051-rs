@@ -38,6 +38,8 @@ pub enum ParseError {
     ExpectedIdentifier(lexer::Position),
     ExpectedColon(lexer::Position),
     ExpectedComma(lexer::Position),
+    ExpectedAt(lexer::Position),
+    ExpectedHash(lexer::Position),
     InvalidLineBody(lexer::Position),
     InvalidMnemonic(String, lexer::Position),
     InvalidOperand(lexer::Token),
@@ -114,6 +116,28 @@ impl Parser {
         }
         else {
             Err(ParseError::ExpectedComma(cur_tok.get_position()))
+        }
+    }
+
+    fn expect_at(&mut self) -> Result<()> {
+        let cur_tok = try! { self.current_token() };
+        if cur_tok.is_at() {
+            self.advance();
+            Ok(())
+        }
+        else {
+            Err(ParseError::ExpectedAt(cur_tok.get_position()))
+        }
+    }
+
+    fn expect_hash(&mut self) -> Result<()> {
+        let cur_tok = try! { self.current_token() };
+        if cur_tok.is_hash() {
+            self.advance();
+            Ok(())
+        }
+        else {
+            Err(ParseError::ExpectedHash(cur_tok.get_position()))
         }
     }
 
