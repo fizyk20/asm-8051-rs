@@ -175,7 +175,13 @@ impl Parser {
         self.save_pos();
 
         self.advance();
-        let cur_tok = try! { self.current_token() };
+        let cur_tok = self.current_token();
+        if let Err(e) = cur_tok {
+            self.rollback();
+            return Err(e);
+        }
+        let cur_tok = cur_tok.unwrap();
+
         if !cur_tok.is_colon() {
             self.rollback();
             return Err(ParseError::ExpectedColon(cur_tok.get_position()));
@@ -219,9 +225,9 @@ impl Parser {
 
         let first_operand = self.parse_operand();
 
-        if let Err(e) = first_operand {
+        if let Err(_) = first_operand {
             self.rollback();
-            return Err(e);
+            return Ok(LineBody::CodeLine(operator, vec![]));
         }
 
         operands.push(first_operand.unwrap());

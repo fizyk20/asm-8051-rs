@@ -313,6 +313,7 @@ impl Tokenizer {
     pub fn tokenize(text: &str) -> Result<Vec<Token>, TokenizerError> {
         let mut tokenizer = Tokenizer::new();
         try! { tokenizer.consume_text(text) };
+        tokenizer.flush();
         Ok(tokenizer.get_tokens())
     }
 
@@ -333,6 +334,27 @@ impl Write for Tokenizer {
     }
 
     fn flush(&mut self) -> io::Result<()> {
+        match mem::replace(&mut self.state, TokenizerState::Invalid) {
+            TokenizerState::Ready => {
+                self.state = TokenizerState::Ready;
+            }
+            
+            TokenizerState::ReadingNumber(v, p) => {
+                self.tokens.push(Token::Number(v.into_iter().collect(), p));
+                self.state = TokenizerState::Ready;
+            },
+
+            TokenizerState::ReadingIdentifier(v, p) => {
+                self.tokens.push(Token::Identifier(v.into_iter().collect(), p));
+                self.state = TokenizerState::Ready;
+            },
+
+            TokenizerState::ReadingComment => {
+                self.state = TokenizerState::Ready;
+            },
+
+            TokenizerState::Invalid => panic!("Tokenizer caught in invalid state")
+        }
         Ok(())
     }
 }
@@ -403,6 +425,84 @@ mod tests {
             }
             else {
                 panic!("result[5] is not a Number!");
+            }
+        }
+        else {
+            panic!("Tokenization failed!");
+        }
+    }
+
+    #[test]
+    fn test_tokenize2() {
+        let text = "mov a, #20h\nret";
+        if let Ok(result) = Tokenizer::tokenize(text) {
+            assert_eq!(result.len(), 7);
+
+            // mov
+            if let Token::Identifier(ref s, pos) = result[0] {
+                assert_eq!(s, "mov");
+                assert_eq!(pos.row, 1);
+                assert_eq!(pos.column, 1);
+            }
+            else {
+                panic!("result[0] is not an Identifier!");
+            }
+
+            // a
+            if let Token::Identifier(ref s, pos) = result[1] {
+                assert_eq!(s, "a");
+                assert_eq!(pos.row, 1);
+                assert_eq!(pos.column, 5);
+            }
+            else {
+                panic!("result[1] is not an Identifier!");
+            }
+
+            // ,
+            if let Token::Comma(pos) = result[2] {
+                assert_eq!(pos.row, 1);
+                assert_eq!(pos.column, 6);
+            }
+            else {
+                panic!("result[2] is not a Comma!");
+            }
+
+            // #
+            if let Token::Hash(pos) = result[3] {
+                assert_eq!(pos.row, 1);
+                assert_eq!(pos.column, 8);
+            }
+            else {
+                panic!("result[3] is not a Hash!");
+            }
+
+            // 20h
+            if let Token::Number(ref s, pos) = result[4] {
+                assert_eq!(s, "20h");
+                assert_eq!(pos.row, 1);
+                assert_eq!(pos.column, 9);
+            }
+            else {
+                panic!("result[4] is not a Number!");
+            }
+
+            // \n
+            if let Token::Newline(pos) = result[5] {
+                assert_eq!(pos.row, 1);
+                assert_eq!(pos.column, 12);
+            }
+            else {
+                panic!("result[5] is not a Newline!");
+            }
+
+            // ret
+            if let Token::Identifier(ref s, pos) = result[6] {
+                assert_eq!(s, "ret");
+                assert_eq!(pos.row, 2);
+                assert_eq!(pos.column, 1);
+            }
+            else {
+                panic!("result[6] is not an Identifier!");
             }
         }
         else {
