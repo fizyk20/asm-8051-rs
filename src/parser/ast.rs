@@ -1,3 +1,4 @@
+use regex::Regex;
 use super::lexer;
 use super::keywords::{Operator, Register, Direct};
 
@@ -48,6 +49,7 @@ pub enum ParseError {
     InvalidOperand(lexer::Token),
     InvalidRegister(lexer::Token),
     InvalidDirectId(lexer::Token),
+    InvalidNumber(String),
     GeneralError
 }
 
@@ -292,13 +294,53 @@ impl Parser {
         Ok(operator.unwrap())
     }
 
+    fn parse_base(s: &str, base: u8) -> i32 {
+        let negative = s.starts_with("-");
+        let unsigned_s = if negative { &s[1..] } else { &s[..] };
+        let mut result: i32 = 0;
+        for c in unsigned_s.chars() {
+            let digit = c.to_digit(base as u32).unwrap();
+            result *= base as i32;
+            result += digit as i32;
+        }
+        if negative {
+            -result
+        }
+        else {
+            result
+        }
+    }
+
     fn parse_number(&mut self) -> Result<i32> {
         let cur_tok = try! { self.current_token() };
         if !cur_tok.is_number() {
             return Err(ParseError::ExpectedNumber(cur_tok.get_position()));
         }
-        self.advance();
-        Ok(0)
+
+        let num_string = cur_tok.get_string().unwrap().to_lowercase();
+        let dec_re = Regex::new(r"^(-?[0-9])+$").unwrap();
+        let bin_re = Regex::new(r"^(-?[01])+b$").unwrap();
+        let hex_re = Regex::new(r"^(-?[0-9][0-9a-f]*)h$").unwrap();
+        let oct_re = Regex::new(r"^(-?[0-7]+)o$").unwrap();
+
+        if let Some(caps) = bin_re.captures(&num_string) {
+            self.advance();
+            return Ok(Parser::parse_base(caps.at(1).unwrap(), 2));
+        }
+        else if let Some(caps) = oct_re.captures(&num_string) {
+            self.advance();
+            return Ok(Parser::parse_base(caps.at(1).unwrap(), 8));
+        }
+        else if let Some(caps) = dec_re.captures(&num_string) {
+            self.advance();
+            return Ok(Parser::parse_base(caps.at(1).unwrap(), 10));
+        }
+        else if let Some(caps) = hex_re.captures(&num_string) {
+            self.advance();
+            return Ok(Parser::parse_base(caps.at(1).unwrap(), 16));
+        }
+
+        Err(ParseError::InvalidNumber(num_string))
     }
 
     fn parse_operand(&mut self) -> Result<Operand> {
