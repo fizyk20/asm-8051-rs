@@ -39,6 +39,7 @@ pub enum ParseError {
     ExpectedNewline(lexer::Position),
     ExpectedIdentifier(lexer::Position),
     ExpectedColon(lexer::Position),
+    ExpectedComma(lexer::Position),
     InvalidLineBody(lexer::Position),
     GeneralError
 }
@@ -88,6 +89,16 @@ impl Parser {
         }
         else {
             Err(ParseError::ExpectedNewline(self.current_token().get_position()))
+        }
+    }
+
+    fn expect_comma(&mut self) -> Result<()> {
+        if self.current_token().is_comma() {
+            self.advance();
+            Ok(())
+        }
+        else {
+            Err(ParseError::ExpectedComma(self.current_token().get_position()))
         }
     }
 
@@ -171,6 +182,52 @@ impl Parser {
     }
 
     fn parse_code_line(&mut self) -> Result<LineBody> {
+        self.save_pos();
+
+        let result_operator = self.parse_operator();
+        if let Err(e) = result_operator {
+            self.rollback();
+            return Err(e);
+        }
+
+        let operator = result_operator.unwrap();
+
+        self.discard_saved_pos();
+        self.save_pos();
+
+        let mut operands = Vec::new();
+
+        let first_operand = self.parse_operand();
+
+        if let Err(e) = first_operand {
+            self.rollback();
+            return Err(e);
+        }
+
+        operands.push(first_operand.unwrap());
+
+        self.discard_saved_pos();
+        self.save_pos();
+
+        while self.expect_comma().is_ok() {
+            let next_operand = self.parse_operand();
+            if let Err(e) = next_operand {
+                self.rollback();
+                return Err(e);
+            }
+            operands.push(next_operand.unwrap());
+        }
+
+        self.discard_saved_pos();
+
+        Ok(LineBody::CodeLine(operator, operands))
+    }
+
+    fn parse_operator(&mut self) -> Result<Operator> {
+        Err(ParseError::GeneralError)
+    }
+
+    fn parse_operand(&mut self) -> Result<Operand> {
         Err(ParseError::GeneralError)
     }
 

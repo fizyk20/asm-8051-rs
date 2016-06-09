@@ -46,6 +46,13 @@ impl Token {
         }
     }
 
+    pub fn is_comma(&self) -> bool {
+        match *self {
+            Token::Comma(_) => true,
+            _ => false
+        }
+    }
+
     pub fn is_newline(&self) -> bool {
         match *self {
             Token::Newline(_) => true,
