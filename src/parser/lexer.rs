@@ -185,7 +185,7 @@ impl Tokenizer {
                 Ok(())
             },
 
-            '_' | 'a' ... 'z' | 'A' ... 'Z' => {
+            '_' | '.' | 'a' ... 'z' | 'A' ... 'Z' => {
                 self.state = TokenizerState::ReadingIdentifier(vec![c], self.cur_pos);
                 self.advance();
                 Ok(())
@@ -280,7 +280,7 @@ impl Tokenizer {
 
     fn handle_identifier(&mut self, mut v: Vec<char>, p: Position, c: char) -> Result<(), TokenizerError> {
         match c {
-            'a' ... 'z' | 'A' ... 'Z' | '0' ... '9' | '_' => {
+            'a' ... 'z' | 'A' ... 'Z' | '0' ... '9' | '_' | '.' => {
                 v.push(c);
                 self.state = TokenizerState::ReadingIdentifier(v, p);
                 self.advance();
