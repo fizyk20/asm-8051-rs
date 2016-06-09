@@ -1,3 +1,4 @@
+use regex::Regex;
 use std::str::FromStr;
 
 #[derive(Clone, Debug)]
@@ -115,10 +116,68 @@ pub enum Register {
     DPTR
 }
 
+impl FromStr for Register {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Register, ()> {
+        let re = Regex::new(r"^R(\d)$").unwrap();
+        if let Some(caps) = re.captures(s) {
+            let reg_num: u8 = caps.at(1).unwrap().parse().unwrap();
+            if reg_num < 8 {
+                return Ok(Register::R(reg_num));
+            }
+            else {
+                return Err(());
+            }
+        }
+
+        match s.to_lowercase().as_ref() {
+            "a" => Ok(Register::A),
+            "b" => Ok(Register::B),
+            "c" => Ok(Register::C),
+            "pc" => Ok(Register::PC),
+            "sp" => Ok(Register::SP),
+            "dptr" => Ok(Register::DPTR),
+            _ => Err(())
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum Direct {
     Port(u8),
     PortBit(u8, u8),
+}
 
+impl FromStr for Direct {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Direct, ()> {
+        let port_re = Regex::new(r"^P(\d)$").unwrap();
+        let port_bit_re = Regex::new(r"^P(\d)\.(\d)$").unwrap();
+
+        if let Some(caps) = port_re.captures(s) {
+            let port_num: u8 = caps.at(1).unwrap().parse().unwrap();
+            if port_num < 7 {
+                return Ok(Direct::Port(port_num));
+            }
+            else {
+                return Err(());
+            }
+        }
+
+        if let Some(caps) = port_bit_re.captures(s) {
+            let port_num: u8 = caps.at(1).unwrap().parse().unwrap();
+            let bit_num: u8 = caps.at(2).unwrap().parse().unwrap();
+            if port_num < 7 && bit_num < 8 {
+                return Ok(Direct::PortBit(port_num, bit_num));
+            }
+            else {
+                return Err(());
+            }
+        }
+
+        Err(())
+    }
 }
 

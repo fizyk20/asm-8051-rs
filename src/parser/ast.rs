@@ -1,5 +1,5 @@
 use super::lexer;
-use super::keywords::{Operator, Register};
+use super::keywords::{Operator, Register, Direct};
 
 #[derive(Clone, Debug)]
 pub struct Program(Vec<Line>);
@@ -20,9 +20,11 @@ pub struct Label(String);
 pub enum Operand {
     Register(Register),
     Direct(u8),
+    DirectId(Direct),
     IndirectReg(Register),
     IndirectSum(Register, Register),
-    Immediate(i32)
+    Immediate(i32),
+    ImmediateId(String)
 }
 
 #[derive(Clone, Debug)]
@@ -36,6 +38,7 @@ pub enum ParseError {
     UnexpectedEof(lexer::Token),
     ExpectedNewline(lexer::Position),
     ExpectedIdentifier(lexer::Position),
+    ExpectedNumber(lexer::Position),
     ExpectedColon(lexer::Position),
     ExpectedComma(lexer::Position),
     ExpectedAt(lexer::Position),
@@ -43,6 +46,8 @@ pub enum ParseError {
     InvalidLineBody(lexer::Position),
     InvalidMnemonic(String, lexer::Position),
     InvalidOperand(lexer::Token),
+    InvalidRegister(lexer::Token),
+    InvalidDirectId(lexer::Token),
     GeneralError
 }
 
@@ -287,6 +292,15 @@ impl Parser {
         Ok(operator.unwrap())
     }
 
+    fn parse_number(&mut self) -> Result<i32> {
+        let cur_tok = try! { self.current_token() };
+        if !cur_tok.is_number() {
+            return Err(ParseError::ExpectedNumber(cur_tok.get_position()));
+        }
+        self.advance();
+        Ok(0)
+    }
+
     fn parse_operand(&mut self) -> Result<Operand> {
         let res_indirect_sum = self.parse_indirect_sum();
         if let Ok(result) = res_indirect_sum {
@@ -318,23 +332,93 @@ impl Parser {
     }
     
     fn parse_indirect_sum(&mut self) -> Result<Operand> {
+        self.save_pos();
+        if let Err(e) = self.expect_at() {
+            self.rollback();
+            return Err(e);
+        }
+        self.rollback();
         Err(ParseError::GeneralError)
     }
     
     fn parse_indirect(&mut self) -> Result<Operand> {
+        self.save_pos();
+        if let Err(e) = self.expect_at() {
+            self.rollback();
+            return Err(e);
+        }
+        self.rollback();
         Err(ParseError::GeneralError)
     }
     
     fn parse_immediate(&mut self) -> Result<Operand> {
+        self.save_pos();
+        if let Err(e) = self.expect_hash() {
+            self.rollback();
+            return Err(e);
+        }
+
+        let cur_tok = self.current_token();
+        if let Err(e) = cur_tok {
+            self.rollback();
+            return Err(e);
+        }
+        let cur_tok = cur_tok.unwrap();
+
+        if cur_tok.is_identifier() {
+            self.discard_saved_pos();
+            self.advance();
+            return Ok(Operand::ImmediateId(cur_tok.get_string().unwrap()));
+        }
+        
+        if cur_tok.is_number() {
+            let number = self.parse_number();
+            if let Err(e) = number {
+                self.rollback();
+                return Err(e);
+            }
+            self.discard_saved_pos();
+            return Ok(Operand::Immediate(number.unwrap()));
+        }
+
+        self.rollback();
         Err(ParseError::GeneralError)
     }
     
     fn parse_register(&mut self) -> Result<Operand> {
-        Err(ParseError::GeneralError)
+        let cur_tok = try! { self.current_token() };
+        if cur_tok.is_identifier() {
+            if let Ok(reg_result) = cur_tok.get_string().unwrap().parse() {
+                self.advance();
+                Ok(Operand::Register(reg_result))
+            }
+            else {
+                Err(ParseError::InvalidRegister(cur_tok))
+            }
+        }
+        else {
+            Err(ParseError::ExpectedIdentifier(cur_tok.get_position()))
+        }
     }
 
     fn parse_direct(&mut self) -> Result<Operand> {
-        Err(ParseError::GeneralError)
+        let cur_tok = try! { self.current_token() };
+        if cur_tok.is_identifier() {
+            if let Ok(dir_result) = cur_tok.get_string().unwrap().parse() {
+                self.advance();
+                Ok(Operand::DirectId(dir_result))
+            }
+            else {
+                Err(ParseError::InvalidDirectId(cur_tok))
+            }
+        }
+        else if cur_tok.is_number() {
+            let number = try! { self.parse_number() };
+            Ok(Operand::Direct(number as u8))
+        }
+        else {
+            Err(ParseError::ExpectedIdentifier(cur_tok.get_position()))
+        }
     }
 
     fn parse_value_def(&mut self) -> Result<LineBody> {

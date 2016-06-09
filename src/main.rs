@@ -1,3 +1,4 @@
+extern crate regex;
 mod parser;
 use parser::lexer::Tokenizer;
 use parser::ast::Parser;
