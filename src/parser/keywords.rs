@@ -106,17 +106,19 @@ impl FromStr for Operator {
 
 #[derive(Clone, Debug)]
 pub enum Register {
-    R0,
-    R1,
-    R2,
-    R3,
-    R4,
-    R5,
-    R6,
-    R7,
+    R(u8),
+    A,
+    B,
+    C,
     PC,
     SP,
     DPTR
-    // TODO
+}
+
+#[derive(Clone, Debug)]
+pub enum Direct {
+    Port(u8),
+    PortBit(u8, u8),
+
 }
 

@@ -1,6 +1,3 @@
-use std::fmt::Display;
-use std::str::FromStr;
-use std::error;
 use super::lexer;
 use super::keywords::{Operator, Register};
 

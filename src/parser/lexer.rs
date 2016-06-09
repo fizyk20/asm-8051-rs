@@ -313,7 +313,7 @@ impl Tokenizer {
     pub fn tokenize(text: &str) -> Result<Vec<Token>, TokenizerError> {
         let mut tokenizer = Tokenizer::new();
         try! { tokenizer.consume_text(text) };
-        tokenizer.flush();
+        tokenizer.flush().expect("Tokenizer.flush() failed");
         Ok(tokenizer.get_tokens())
     }
 
