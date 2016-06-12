@@ -4,14 +4,14 @@ use std::mem;
 use std::error;
 use std::fmt::Display;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Position {
     row: usize,
     column: usize
 }
 
 /// An enumeration listing possible tokens
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Token {
     Identifier(String, Position),
     Number(String, Position),

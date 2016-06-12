@@ -2,22 +2,22 @@ use regex::Regex;
 use super::lexer;
 use super::keywords::{Operator, Register, Direct};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Program(Vec<Line>);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Line(Option<Label>, Option<LineBody>);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum LineBody {
     CodeLine(Operator, Vec<Operand>),
     ValueDefinition(Vec<Value>)
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Label(String);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Operand {
     Register(Register),
     Direct(u8),
@@ -28,13 +28,13 @@ pub enum Operand {
     ImmediateId(String)
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     Byte(u8),
     String(String)
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ParseError {
     UnexpectedEof(lexer::Token),
     ExpectedNewline(lexer::Position),
@@ -292,8 +292,8 @@ impl<'a> ParserState<'a> {
         }
 
         let num_string = cur_tok.get_string().unwrap().to_lowercase();
-        let dec_re = Regex::new(r"^(-?[0-9])+$").unwrap();
-        let bin_re = Regex::new(r"^(-?[01])+b$").unwrap();
+        let dec_re = Regex::new(r"^(-?[0-9]+)$").unwrap();
+        let bin_re = Regex::new(r"^(-?[01]+)b$").unwrap();
         let hex_re = Regex::new(r"^(-?[0-9][0-9a-f]*)h$").unwrap();
         let oct_re = Regex::new(r"^(-?[0-7]+)o$").unwrap();
 
@@ -459,7 +459,105 @@ impl<'a> ParserState<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use super::super::lexer::Tokenizer;
+    use super::super::keywords::*;
+    use super::super::lexer::{Token, Tokenizer};
+
+    fn tokens(s: &str) -> Vec<Token> {
+        Tokenizer::tokenize(s).unwrap()
+    }
+
+    // Operands tests
+
+    // Registers
+    
+    #[test]
+    fn test_parse_register() {
+        let tokens = tokens("R1");
+        let state = ParserState::new(&tokens);
+        let result = state.parse_register();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().result, Register::R(1));
+    }
+    
+    #[test]
+    fn test_parse_register_fail() {
+        let tokens = tokens("R8");
+        let state = ParserState::new(&tokens);
+        let result = state.parse_register();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_register_fail2() {
+        let tokens = tokens("asdf");
+        let state = ParserState::new(&tokens);
+        let result = state.parse_register();
+        assert!(result.is_err());
+    }
+
+    // Immediate values
+    
+    #[test]
+    fn test_number_binary() {
+        let tokens = tokens("01101001b");
+        let state = ParserState::new(&tokens);
+        let result = state.parse_number();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().result, 105);
+    }
+    
+    #[test]
+    fn test_number_octal() {
+        let tokens = tokens("744o");
+        let state = ParserState::new(&tokens);
+        let result = state.parse_number();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().result, 484);
+    }
+    
+    #[test]
+    fn test_number_decimal() {
+        let tokens = tokens("183");
+        let state = ParserState::new(&tokens);
+        let result = state.parse_number();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().result, 183);
+    }
+    
+    #[test]
+    fn test_number_hex() {
+        let tokens = tokens("0cdh");
+        let state = ParserState::new(&tokens);
+        let result = state.parse_number();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().result, 205);
+    }
+    
+    #[test]
+    fn test_number_invalid() {
+        let tokens = tokens("0cdo");
+        let state = ParserState::new(&tokens);
+        let result = state.parse_number();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_immediate() {
+        let tokens = tokens("#0ABh");
+        let state = ParserState::new(&tokens);
+        let result = state.parse_immediate();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().result, Operand::Immediate(171));
+    }
+
+    #[test]
+    fn test_immediate_id() {
+        let tokens = tokens("#label");
+        let state = ParserState::new(&tokens);
+        let result = state.parse_immediate();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().result, Operand::ImmediateId("label".to_string()));
+    }
 
     #[test]
     fn test_parser() {

@@ -1,7 +1,7 @@
 use regex::Regex;
 use std::str::FromStr;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Operator {
     Acall,
     Add,
@@ -105,7 +105,7 @@ impl FromStr for Operator {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Register {
     R(u8),
     A,
@@ -143,7 +143,7 @@ impl FromStr for Register {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Direct {
     Port(u8),
     PortBit(u8, u8),
