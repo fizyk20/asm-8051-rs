@@ -1,7 +1,7 @@
 extern crate regex;
 mod parser;
 use parser::lexer::Tokenizer;
-use parser::ast::Parser;
+use parser::ast::ParserState;
 
 fn main() {
     let program = "mov P3, #0AAh\nret\n";
@@ -14,7 +14,7 @@ fn main() {
     };
     println!("Tokens: {:?}", tokens);
 
-    let program = match Parser::parse(tokens) {
+    let program = match ParserState::parse(tokens) {
         Ok(program) => program,
         Err(e) => {
             println!("Parser error: {:?}", e);
