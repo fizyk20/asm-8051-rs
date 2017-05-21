@@ -1,5 +1,6 @@
 extern crate regex;
 mod parser;
+mod mir;
 use parser::ast::ParserState;
 use parser::lexer::Tokenizer;
 

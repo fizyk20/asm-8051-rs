@@ -3,22 +3,30 @@ use super::lexer;
 use regex::Regex;
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Program(Vec<Line>);
+pub struct Program {
+    pub lines: Vec<Line>,
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Line {
-    OrgLine(u16),
-    ProgramLine(Option<Label>, Option<LineBody>),
+    OrgLine { address: u16 },
+    ProgramLine {
+        label: Option<Label>,
+        body: Option<LineBody>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum LineBody {
-    CodeLine(Operator, Vec<Operand>),
-    ValueDefinition(Vec<Value>),
+    CodeLine {
+        operator: Operator,
+        operands: Vec<Operand>,
+    },
+    ValueDefinition { values: Vec<Value> },
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Label(String);
+pub struct Label(pub String);
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Operand {
@@ -35,6 +43,16 @@ pub enum Value {
     Byte(u8),
     Word(u16),
     String(String),
+}
+
+impl Value {
+    pub fn into_bytes(self) -> Vec<u8> {
+        match self {
+            Value::Byte(b) => vec![b],
+            Value::Word(w) => vec![(w % 256) as u8, (w / 256) as u8],
+            Value::String(s) => s.into_bytes(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -176,7 +194,7 @@ impl<'a> ParserState<'a> {
 
         Ok(ParseResult {
                state: cur_state,
-               result: Program(lines),
+               result: Program { lines: lines },
            })
     }
 
@@ -192,7 +210,7 @@ impl<'a> ParserState<'a> {
             } = cur_state.parse_number()?;
             return Ok(ParseResult {
                           state: cur_state,
-                          result: Line::OrgLine(Self::to_word(number)?),
+                          result: Line::OrgLine { address: Self::to_word(number)? },
                       });
         }
 
@@ -218,7 +236,10 @@ impl<'a> ParserState<'a> {
         let newline_result = cur_state.expect_newline()?;
         Ok(ParseResult {
                state: newline_result,
-               result: Line::ProgramLine(label, lbody),
+               result: Line::ProgramLine {
+                   label: label,
+                   body: lbody,
+               },
            })
     }
 
@@ -271,7 +292,10 @@ impl<'a> ParserState<'a> {
         if let Err(_) = first_operand {
             return Ok(ParseResult {
                           state: cur_state,
-                          result: LineBody::CodeLine(operator, vec![]),
+                          result: LineBody::CodeLine {
+                              operator: operator,
+                              operands: vec![],
+                          },
                       });
         }
 
@@ -292,7 +316,10 @@ impl<'a> ParserState<'a> {
 
         Ok(ParseResult {
                state: cur_state,
-               result: LineBody::CodeLine(operator, operands),
+               result: LineBody::CodeLine {
+                   operator: operator,
+                   operands: operands,
+               },
            })
     }
 
@@ -529,7 +556,7 @@ impl<'a> ParserState<'a> {
 
         Ok(ParseResult {
                state: cur_state,
-               result: LineBody::ValueDefinition(values),
+               result: LineBody::ValueDefinition { values: values },
            })
     }
 
@@ -779,10 +806,12 @@ mod test {
         let result = state.parse_value_def();
         assert!(result.is_ok());
         assert_eq!(result.unwrap().result,
-                   LineBody::ValueDefinition(vec![Value::String("foo bar quux".to_owned()),
-                                                  Value::Byte(13),
-                                                  Value::Byte(10),
-                                                  Value::Byte(0)]));
+                   LineBody::ValueDefinition {
+                       values: vec![Value::String("foo bar quux".to_owned()),
+                                    Value::Byte(13),
+                                    Value::Byte(10),
+                                    Value::Byte(0)],
+                   });
     }
 
     #[test]
@@ -792,9 +821,9 @@ mod test {
         let result = state.parse_value_def();
         assert!(result.is_ok());
         assert_eq!(result.unwrap().result,
-                   LineBody::ValueDefinition(vec![Value::Word(278),
-                                                  Value::Word(10765),
-                                                  Value::Word(13)]));
+                   LineBody::ValueDefinition {
+                       values: vec![Value::Word(278), Value::Word(10765), Value::Word(13)],
+                   });
     }
 
     #[test]
