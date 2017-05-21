@@ -1,6 +1,5 @@
-use super::Instruction;
-use parser::ast::*;
-use parser::keywords::*;
+use super::{Instruction, InstructionError};
+use parser::ast::{Line, LineBody, Program};
 use std::collections::HashMap;
 
 pub struct Mir {
@@ -9,7 +8,7 @@ pub struct Mir {
 }
 
 impl Mir {
-    pub fn from_program(program: Program) -> Self {
+    pub fn from_program(program: Program) -> Result<Self, InstructionError> {
         let mut labels = HashMap::new();
         let mut instructions = Vec::new();
         let mut current_address = 0;
@@ -27,7 +26,7 @@ impl Mir {
             if let Some(body) = body {
                 match body {
                     LineBody::CodeLine { operator, operands } => {
-                        let instruction = Instruction::from_code(operator, operands);
+                        let instruction = Instruction::from_code(operator, operands)?;
                         let len = instruction.bytes();
                         instructions.push((current_address, instruction));
                         current_address += len;
@@ -44,9 +43,9 @@ impl Mir {
                 }
             }
         }
-        Mir {
-            labels: labels,
-            instructions: instructions,
-        }
+        Ok(Mir {
+               labels: labels,
+               instructions: instructions,
+           })
     }
 }
