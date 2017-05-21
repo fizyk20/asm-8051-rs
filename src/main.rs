@@ -1,10 +1,10 @@
 extern crate regex;
 mod parser;
-use parser::lexer::Tokenizer;
 use parser::ast::ParserState;
+use parser::lexer::Tokenizer;
 
 fn main() {
-    let program = "mov P3, #0AAh\nret\n";
+    let program = "db \"foobar\", 0\nmov P3, #0AAh\nret\n";
     let tokens = match Tokenizer::tokenize(program) {
         Ok(tokens) => tokens,
         Err(e) => {
