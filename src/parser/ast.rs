@@ -699,15 +699,56 @@ mod test {
     }
 
     #[test]
+    fn test_define_bytes() {
+        let tokens = tokens("db \"foo bar quux\", 13, 10, 0");
+        let state = ParserState::new(&tokens);
+        let result = state.parse_value_def();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().result,
+                   LineBody::ValueDefinition(vec![Value::String("foo bar quux".to_owned()),
+                                                  Value::Byte(13),
+                                                  Value::Byte(10),
+                                                  Value::Byte(0)]));
+    }
+
+    #[test]
+    fn test_define_words() {
+        let tokens = tokens("dw 278, 10765, 13");
+        let state = ParserState::new(&tokens);
+        let result = state.parse_value_def();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().result,
+                   LineBody::ValueDefinition(vec![Value::Word(278),
+                                                  Value::Word(10765),
+                                                  Value::Word(13)]));
+    }
+
+    #[test]
+    fn test_invalid_bytes() {
+        let tokens = tokens("db \"foo bar quux\", 1376, 10, 0");
+        let state = ParserState::new(&tokens);
+        let result = state.parse_value_def();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_words() {
+        let tokens = tokens("dw 278, \"abc\", 13");
+        let state = ParserState::new(&tokens);
+        let result = state.parse_value_def();
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn test_parser() {
-        let program = "mov A, 20h\nret";
+        let program = "test: db \"foobar\", 0 ; test\nmov A, 20h\nret";
         let tokens = Tokenizer::tokenize(program);
         assert!(tokens.is_ok());
         let tokens = tokens.unwrap();
         println!("{:?}", tokens);
 
-        let parsed_program = ParserState::parse(tokens);
-        assert!(parsed_program.is_ok());
+        let parsed_program = ParserState::parse(tokens).unwrap();
+        //assert!(parsed_program.is_ok());
         println!("{:?}", parsed_program);
     }
 }

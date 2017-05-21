@@ -261,6 +261,7 @@ impl Tokenizer {
     fn handle_comment(&mut self, c: char) -> Result<(), TokenizerError> {
         match c {
             '\n' => {
+                self.tokens.push(Token::Newline(self.cur_pos));
                 self.state = TokenizerState::Ready;
                 self.advance();
                 self.newline();
