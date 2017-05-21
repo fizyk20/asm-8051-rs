@@ -6,7 +6,10 @@ use regex::Regex;
 pub struct Program(Vec<Line>);
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Line(Option<Label>, Option<LineBody>);
+pub enum Line {
+    OrgLine(u16),
+    ProgramLine(Option<Label>, Option<LineBody>),
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum LineBody {
@@ -170,6 +173,19 @@ impl<'a> ParserState<'a> {
     fn parse_line(self) -> Result<ParseResult<'a, Line>> {
         let mut cur_state = self;
 
+        if cur_state.current_token()?.is_identifier() &&
+           cur_state.current_token()?.get_string().unwrap() == "org" {
+            cur_state = cur_state.advanced();
+            let ParseResult {
+                state: cur_state,
+                result: number,
+            } = cur_state.parse_number()?;
+            return Ok(ParseResult {
+                          state: cur_state,
+                          result: Line::OrgLine(Self::to_word(number)?),
+                      });
+        }
+
         let result_label = cur_state.clone().parse_label();
 
         let label;
@@ -192,7 +208,7 @@ impl<'a> ParserState<'a> {
         let newline_result = cur_state.expect_newline()?;
         Ok(ParseResult {
                state: newline_result,
-               result: Line(label, lbody),
+               result: Line::ProgramLine(label, lbody),
            })
     }
 
