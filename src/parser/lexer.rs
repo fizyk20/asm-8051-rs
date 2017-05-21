@@ -364,11 +364,14 @@ impl Tokenizer {
             'n' => {
                 v.push('\n');
             }
+            't' => {
+                v.push('\t');
+            }
             '\\' => {
                 v.push('\\');
             }
-            't' => {
-                v.push('\t');
+            '"' => {
+                v.push('"');
             }
             c => {
                 return Err(TokenizerError::UnexpectedCharacter(self.cur_pos, c));
@@ -621,6 +624,23 @@ mod tests {
             assert_eq!(result.len(), 1);
             if let Token::String(ref s, pos) = result[0] {
                 assert_eq!(s, "abcd\nefg");
+                assert_eq!(pos.row, 1);
+                assert_eq!(pos.column, 1);
+            } else {
+                panic!("result[0] is not a String!");
+            }
+        } else {
+            panic!("Tokenization failed!");
+        }
+    }
+
+    #[test]
+    fn test_string_quote() {
+        let text = "\"abcd\\\"efg\"";
+        if let Ok(result) = Tokenizer::tokenize(text) {
+            assert_eq!(result.len(), 1);
+            if let Token::String(ref s, pos) = result[0] {
+                assert_eq!(s, "abcd\"efg");
                 assert_eq!(pos.row, 1);
                 assert_eq!(pos.column, 1);
             } else {
