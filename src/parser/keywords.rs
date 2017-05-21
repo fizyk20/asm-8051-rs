@@ -47,7 +47,7 @@ pub enum Operator {
     Swap,
     Xch,
     Xchd,
-    Xrl
+    Xrl,
 }
 
 impl FromStr for Operator {
@@ -100,7 +100,7 @@ impl FromStr for Operator {
             "xch" => Ok(Operator::Xch),
             "xchd" => Ok(Operator::Xchd),
             "xrl" => Ok(Operator::Xrl),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 }
@@ -113,7 +113,7 @@ pub enum Register {
     C,
     PC,
     SP,
-    DPTR
+    DPTR,
 }
 
 impl FromStr for Register {
@@ -125,8 +125,7 @@ impl FromStr for Register {
             let reg_num: u8 = caps.at(1).unwrap().parse().unwrap();
             if reg_num < 8 {
                 return Ok(Register::R(reg_num));
-            }
-            else {
+            } else {
                 return Err(());
             }
         }
@@ -138,7 +137,7 @@ impl FromStr for Register {
             "pc" => Ok(Register::PC),
             "sp" => Ok(Register::SP),
             "dptr" => Ok(Register::DPTR),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 }
@@ -160,8 +159,7 @@ impl FromStr for Direct {
             let port_num: u8 = caps.at(1).unwrap().parse().unwrap();
             if port_num < 7 {
                 return Ok(Direct::Port(port_num));
-            }
-            else {
+            } else {
                 return Err(());
             }
         }
@@ -171,8 +169,7 @@ impl FromStr for Direct {
             let bit_num: u8 = caps.at(2).unwrap().parse().unwrap();
             if port_num < 7 && bit_num < 8 {
                 return Ok(Direct::PortBit(port_num, bit_num));
-            }
-            else {
+            } else {
                 return Err(());
             }
         }
@@ -181,3 +178,20 @@ impl FromStr for Direct {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum Definition {
+    DefineByte,
+    DefineWord,
+}
+
+impl FromStr for Definition {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Definition, ()> {
+        match s {
+            "db" => Ok(Definition::DefineByte),
+            "dw" => Ok(Definition::DefineWord),
+            _ => Err(()),
+        }
+    }
+}
