@@ -1,4 +1,4 @@
-use super::keywords::{Definition, Direct, Operator, Register};
+use super::keywords::{Definition, Operator, Register};
 use super::lexer;
 use regex::Regex;
 
@@ -24,7 +24,6 @@ pub struct Label(String);
 pub enum Operand {
     Register(Register),
     Direct(u8),
-    DirectId(Direct),
     IndirectReg(Register),
     IndirectSum(Register, Register),
     Immediate(i32),
@@ -46,6 +45,7 @@ pub enum ParseError {
     ExpectedNumber(lexer::Position),
     ExpectedColon(lexer::Position),
     ExpectedComma(lexer::Position),
+    ExpectedDot(lexer::Position),
     ExpectedAt(lexer::Position),
     ExpectedHash(lexer::Position),
     ExpectedPlus(lexer::Position),
@@ -54,6 +54,7 @@ pub enum ParseError {
     InvalidOperand(lexer::Token),
     InvalidRegister(lexer::Token),
     InvalidDirectId(lexer::Token),
+    InvalidDirectAddr(u8),
     InvalidNumber(String),
     InvalidByte(i32),
     InvalidWord(i32),
@@ -123,6 +124,15 @@ impl<'a> ParserState<'a> {
             Ok(self.advanced())
         } else {
             Err(ParseError::ExpectedComma(cur_tok.get_position()))
+        }
+    }
+
+    fn expect_dot(self) -> Result<ParserState<'a>> {
+        let cur_tok = self.current_token()?;
+        if cur_tok.is_dot() {
+            Ok(self.advanced())
+        } else {
+            Err(ParseError::ExpectedDot(cur_tok.get_position()))
         }
     }
 
@@ -464,25 +474,43 @@ impl<'a> ParserState<'a> {
     }
 
     fn parse_direct(self) -> Result<ParseResult<'a, Operand>> {
-        let cur_tok = self.current_token()?;
-        if cur_tok.is_identifier() {
-            if let Ok(dir_result) = cur_tok.get_string().unwrap().parse() {
-                Ok(ParseResult {
-                       state: self.advanced(),
-                       result: Operand::DirectId(dir_result),
-                   })
-            } else {
-                Err(ParseError::InvalidDirectId(cur_tok))
-            }
+        let cur_state = self;
+        let cur_tok = cur_state.current_token()?;
+        let (mut cur_state, mut address) = if cur_tok.is_identifier() {
+            (cur_state.advanced(), Self::direct_id_to_addr(cur_tok)?)
         } else if cur_tok.is_number() {
-            let number = self.parse_number()?;
-            Ok(ParseResult {
-                   state: number.state,
-                   result: Operand::Direct(number.result as u8),
-               })
+            let ParseResult {
+                state: cur_state,
+                result: number,
+            } = cur_state.parse_number()?;
+            (cur_state, Self::to_byte(number)?)
         } else {
-            Err(ParseError::ExpectedIdentifier(cur_tok.get_position()))
+            return Err(ParseError::ExpectedIdentifier(cur_tok.get_position()));
+        };
+
+        if let Ok(ParseResult {
+                      state: new_state,
+                      result: bit_num,
+                  }) = cur_state.clone().parse_bit() {
+            address = Self::direct_bit(address, bit_num)?;
+            cur_state = new_state;
         }
+        Ok(ParseResult {
+               state: cur_state,
+               result: Operand::Direct(address),
+           })
+    }
+
+    fn parse_bit(self) -> Result<ParseResult<'a, u8>> {
+        let cur_state = self.expect_dot()?;
+        let ParseResult {
+            state: cur_state,
+            result: number,
+        } = cur_state.parse_number()?;
+        Ok(ParseResult {
+               state: cur_state,
+               result: Self::to_byte(number)?,
+           })
     }
 
     fn parse_value_def(self) -> Result<ParseResult<'a, LineBody>> {
@@ -606,6 +634,36 @@ impl<'a> ParserState<'a> {
             Ok(word as u16)
         } else {
             Err(ParseError::InvalidWord(word))
+        }
+    }
+
+    fn direct_id_to_addr(id: lexer::Token) -> Result<u8> {
+        match id.get_string().unwrap().to_lowercase().as_ref() {
+            "p0" => Ok(0x80),
+            "p1" => Ok(0x90),
+            "p2" => Ok(0xA0),
+            "p3" => Ok(0xB0),
+            "p4" => Ok(0xE8),
+            "p5" => Ok(0xF8),
+            "p6" => Ok(0xDB),
+            "sp" => Ok(0x81),
+            "th0" => Ok(0x8C),
+            "th1" => Ok(0x8D),
+            "psw" => Ok(0xD0),
+            "acc" => Ok(0xE0),
+            "b" => Ok(0xF0),
+            _ => Err(ParseError::InvalidDirectId(id)),
+        }
+    }
+
+    fn direct_bit(addr: u8, bit_num: u8) -> Result<u8> {
+        assert!(bit_num < 8);
+        if addr >= 0x20 && addr < 0x30 {
+            Ok((addr - 0x20) * 8 + bit_num)
+        } else if addr >= 0x80 {
+            Ok(addr + bit_num)
+        } else {
+            Err(ParseError::InvalidDirectAddr(addr))
         }
     }
 }
@@ -756,15 +814,40 @@ mod test {
     }
 
     #[test]
+    fn test_parse_direct_sp() {
+        let tokens = tokens("SP");
+        let state = ParserState::new(&tokens);
+        let result = state.parse_operand();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().result, Operand::Direct(0x81));
+    }
+
+    #[test]
+    fn test_parse_direct_b() {
+        let tokens = tokens("B");
+        let state = ParserState::new(&tokens);
+        let result = state.parse_operand();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().result, Operand::Direct(0xF0));
+    }
+
+    #[test]
+    fn test_parse_direct_bit() {
+        let tokens = tokens("p5.6");
+        let state = ParserState::new(&tokens);
+        let result = state.parse_operand();
+        assert!(result.is_ok(), "{:?}", result.err().unwrap());
+        assert_eq!(result.unwrap().result, Operand::Direct(0xFE));
+    }
+
+    #[test]
     fn test_parser() {
         let program = "test: db \"foobar\", 0 ; test\nmov A, 20h\nret";
         let tokens = Tokenizer::tokenize(program);
         assert!(tokens.is_ok());
         let tokens = tokens.unwrap();
-        println!("{:?}", tokens);
 
-        let parsed_program = ParserState::parse(tokens).unwrap();
-        //assert!(parsed_program.is_ok());
-        println!("{:?}", parsed_program);
+        let parsed_program = ParserState::parse(tokens);
+        assert!(parsed_program.is_ok());
     }
 }

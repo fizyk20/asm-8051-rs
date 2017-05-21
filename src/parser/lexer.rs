@@ -18,6 +18,7 @@ pub enum Token {
     String(String, Position),
     Colon(Position),
     Comma(Position),
+    Dot(Position),
     At(Position),
     Hash(Position),
     Plus(Position),
@@ -49,6 +50,13 @@ impl Token {
     pub fn is_comma(&self) -> bool {
         match *self {
             Token::Comma(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_dot(&self) -> bool {
+        match *self {
+            Token::Dot(_) => true,
             _ => false,
         }
     }
@@ -88,6 +96,7 @@ impl Token {
             Token::String(_, p) => p,
             Token::Colon(p) => p,
             Token::Comma(p) => p,
+            Token::Dot(p) => p,
             Token::At(p) => p,
             Token::Hash(p) => p,
             Token::Plus(p) => p,
@@ -198,7 +207,7 @@ impl Tokenizer {
                 Ok(())
             }
 
-            '_' | '.' | 'a'...'z' | 'A'...'Z' => {
+            '_' | 'a'...'z' | 'A'...'Z' => {
                 self.state = TokenizerState::ReadingIdentifier(vec![c], self.cur_pos);
                 self.advance();
                 Ok(())
@@ -214,6 +223,13 @@ impl Tokenizer {
             ',' => {
                 self.state = TokenizerState::Ready;
                 self.tokens.push(Token::Comma(self.cur_pos));
+                self.advance();
+                Ok(())
+            }
+
+            '.' => {
+                self.state = TokenizerState::Ready;
+                self.tokens.push(Token::Dot(self.cur_pos));
                 self.advance();
                 Ok(())
             }
@@ -309,7 +325,7 @@ impl Tokenizer {
                          c: char)
                          -> Result<(), TokenizerError> {
         match c {
-            'a'...'z' | 'A'...'Z' | '0'...'9' | '_' | '.' => {
+            'a'...'z' | 'A'...'Z' | '0'...'9' | '_' => {
                 v.push(c);
                 self.state = TokenizerState::ReadingIdentifier(v, p);
                 self.advance();
