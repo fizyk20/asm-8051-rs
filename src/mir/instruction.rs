@@ -1,10 +1,25 @@
 use parser::ast::Operand;
 use parser::keywords::{Operator, Register as Reg};
+use std::collections::HashMap;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Address {
     Number(u16),
     Label(String),
+}
+
+impl Address {
+    pub fn to_u16(&self, labels: &HashMap<String, u16>) -> Result<u16, InstructionError> {
+        match *self {
+            Address::Number(x) => Ok(x),
+            Address::Label(ref s) => {
+                labels
+                    .get(s)
+                    .map(|x| *x)
+                    .ok_or(InstructionError::UnknownLabel(s.clone()))
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -19,6 +34,7 @@ pub enum InstructionError {
         operand: Operand,
         pos: u8,
     },
+    UnknownLabel(String),
 }
 
 #[derive(Clone, Debug)]
@@ -916,6 +932,183 @@ impl Instruction {
                     }
                 }
             }
+        }
+    }
+
+    pub fn to_bytes(&self,
+                    labels: &HashMap<String, u16>,
+                    cur_addr: u16)
+                    -> Result<Vec<u8>, InstructionError> {
+        match *self {
+            Instruction::Acall(ref addr) => {
+                let addr = addr.to_u16(labels)?;
+                Ok(vec![((addr >> 3) & 0xE0) as u8 | 0x11, (addr & 0xFF) as u8])
+            }
+            Instruction::AddAReg(r) => Ok(vec![0x28 | r]),
+            Instruction::AddADirect(dir) => Ok(vec![0x25, dir]),
+            Instruction::AddAIndirReg(r) => Ok(vec![0x26 | r]),
+            Instruction::AddAData(data) => Ok(vec![0x24, data]),
+            Instruction::AddcAReg(r) => Ok(vec![0x38 | r]),
+            Instruction::AddcADirect(dir) => Ok(vec![0x35, dir]),
+            Instruction::AddcAIndirReg(r) => Ok(vec![0x36 | r]),
+            Instruction::AddcAData(data) => Ok(vec![0x34, data]),
+            Instruction::Ajmp(ref addr) => {
+                let addr = addr.to_u16(labels)?;
+                Ok(vec![((addr >> 3) & 0xE0) as u8 | 0x01, (addr & 0xFF) as u8])
+            }
+            Instruction::AnlAReg(r) => Ok(vec![0x58 | r]),
+            Instruction::AnlADirect(dir) => Ok(vec![0x55, dir]),
+            Instruction::AnlAIndirReg(r) => Ok(vec![0x56 | r]),
+            Instruction::AnlAData(data) => Ok(vec![0x54, data]),
+            Instruction::AnlDirectA(dir) => Ok(vec![0x52, dir]),
+            Instruction::AnlDirectData(dir, data) => Ok(vec![0x53, dir, data]),
+            Instruction::AnlCBit(bit) => Ok(vec![0x82, bit]),
+            Instruction::AnlCNegBit(bit) => Ok(vec![0xB0, bit]),
+            Instruction::CjneADirRel(dir, ref addr) => {
+                let addr = addr.to_u16(labels)? - (cur_addr + 3);
+                Ok(vec![0xB5, dir, addr as u8])
+            }
+            Instruction::CjneADataRel(data, ref addr) => {
+                let addr = addr.to_u16(labels)? - (cur_addr + 3);
+                Ok(vec![0xB4, data, addr as u8])
+            }
+            Instruction::CJneRegDataRel(r, data, ref addr) => {
+                let addr = addr.to_u16(labels)? - (cur_addr + 3);
+                Ok(vec![0xB8 | r, data, addr as u8])
+            }
+            Instruction::CjneIndirRegDataRel(r, data, ref addr) => {
+                let addr = addr.to_u16(labels)? - (cur_addr + 3);
+                Ok(vec![0xB6 | r, data, addr as u8])
+            }
+            Instruction::ClrA => Ok(vec![0xE4]),
+            Instruction::ClrC => Ok(vec![0xC3]),
+            Instruction::ClrBit(bit) => Ok(vec![0xC2, bit]),
+            Instruction::CplA => Ok(vec![0xF4]),
+            Instruction::CplC => Ok(vec![0xB3]),
+            Instruction::CplBit(bit) => Ok(vec![0xB2, bit]),
+            Instruction::DaA => Ok(vec![0xD4]),
+            Instruction::DecA => Ok(vec![0x14]),
+            Instruction::DecReg(r) => Ok(vec![0x18 | r]),
+            Instruction::DecDirect(dir) => Ok(vec![0x15, dir]),
+            Instruction::DecIndirReg(r) => Ok(vec![0x16 | r]),
+            Instruction::DivAB => Ok(vec![0x84]),
+            Instruction::DjnzRegRel(r, ref addr) => {
+                let addr = addr.to_u16(labels)? - (cur_addr + 2);
+                Ok(vec![0xD8 | r, addr as u8])
+            }
+            Instruction::DjnzDirectRel(dir, ref addr) => {
+                let addr = addr.to_u16(labels)? - (cur_addr + 3);
+                Ok(vec![0xD5, dir, addr as u8])
+            }
+            Instruction::IncA => Ok(vec![0x04]),
+            Instruction::IncReg(r) => Ok(vec![0x08 | r]),
+            Instruction::IncDirect(dir) => Ok(vec![0x05, dir]),
+            Instruction::IncIndirReg(r) => Ok(vec![0x06 | r]),
+            Instruction::IncDptr => Ok(vec![0xA3]),
+            Instruction::JbBitRel(bit, ref addr) => {
+                let addr = addr.to_u16(labels)? - (cur_addr + 3);
+                Ok(vec![0x20, bit, addr as u8])
+            }
+            Instruction::JbcBitRel(bit, ref addr) => {
+                let addr = addr.to_u16(labels)? - (cur_addr + 3);
+                Ok(vec![0x10, bit, addr as u8])
+            }
+            Instruction::JcRel(ref addr) => {
+                let addr = addr.to_u16(labels)? - (cur_addr + 2);
+                Ok(vec![0x40, addr as u8])
+            }
+            Instruction::JmpIndirAPlusDptr => Ok(vec![0x73]),
+            Instruction::JnbBitRel(bit, ref addr) => {
+                let addr = addr.to_u16(labels)? - (cur_addr + 3);
+                Ok(vec![0x30, bit, addr as u8])
+            }
+            Instruction::JncRel(ref addr) => {
+                let addr = addr.to_u16(labels)? - (cur_addr + 2);
+                Ok(vec![0x50, addr as u8])
+            }
+            Instruction::JnzRel(ref addr) => {
+                let addr = addr.to_u16(labels)? - (cur_addr + 2);
+                Ok(vec![0x70, addr as u8])
+            }
+            Instruction::JzRel(ref addr) => {
+                let addr = addr.to_u16(labels)? - (cur_addr + 2);
+                Ok(vec![0x60, addr as u8])
+            }
+            Instruction::Lcall(ref addr) => {
+                let addr = addr.to_u16(labels)?;
+                Ok(vec![0x12, (addr / 256) as u8, (addr % 256) as u8])
+            }
+            Instruction::Ljmp(ref addr) => {
+                let addr = addr.to_u16(labels)?;
+                Ok(vec![0x02, (addr / 256) as u8, (addr % 256) as u8])
+            }
+            Instruction::MovAReg(r) => Ok(vec![0xE8 | r]),
+            Instruction::MovADirect(dir) => Ok(vec![0xE5, dir]),
+            Instruction::MovAIndirReg(r) => Ok(vec![0xE6 | r]),
+            Instruction::MovAData(data) => Ok(vec![0x74, data]),
+            Instruction::MovRegA(r) => Ok(vec![0xF8 | r]),
+            Instruction::MovRegDir(r, dir) => Ok(vec![0xC8 | r, dir]),
+            Instruction::MovRegData(r, data) => Ok(vec![0x78 | r, data]),
+            Instruction::MovDirectA(dir) => Ok(vec![0xF5, dir]),
+            Instruction::MovDirectReg(dir, r) => Ok(vec![0x88 | r, dir]),
+            Instruction::MovDirectDirect(dir, dir2) => Ok(vec![0x85, dir2, dir]),
+            Instruction::MovDirectIndirReg(dir, r) => Ok(vec![0x86 | r, dir]),
+            Instruction::MovDirectData(dir, data) => Ok(vec![0x75, dir, data]),
+            Instruction::MovIndirRegA(r) => Ok(vec![0xF6 | r]),
+            Instruction::MovIndirRegDirect(r, dir) => Ok(vec![0xA6 | r, dir]),
+            Instruction::MovIndirRegData(r, data) => Ok(vec![0x76 | r, data]),
+            Instruction::MovCBit(bit) => Ok(vec![0xA2, bit]),
+            Instruction::MovBitC(bit) => Ok(vec![0x92, bit]),
+            Instruction::MovDptrData(ref addr) => {
+                let addr = addr.to_u16(labels)?;
+                Ok(vec![0x90, (addr / 256) as u8, (addr % 256) as u8])
+            }
+            Instruction::MovcAIndirAPlusDptr => Ok(vec![0x93]),
+            Instruction::MovcAIndirAPlusPc => Ok(vec![0x83]),
+            Instruction::MovxAIndirReg(r) => Ok(vec![0xE2 | r]),
+            Instruction::MovxAIndirDptr => Ok(vec![0xE0]),
+            Instruction::MovxIndirRegA(r) => Ok(vec![0xF2 | r]),
+            Instruction::MovxIndirDptrA => Ok(vec![0xF0]),
+            Instruction::MulAB => Ok(vec![0xA4]),
+            Instruction::Nop => Ok(vec![0x00]),
+            Instruction::OrlAReg(r) => Ok(vec![0x48 | r]),
+            Instruction::OrlADirect(dir) => Ok(vec![0x45, dir]),
+            Instruction::OrlAIndirReg(r) => Ok(vec![0x46 | r]),
+            Instruction::OrlAData(data) => Ok(vec![0x44, data]),
+            Instruction::OrlDirectA(dir) => Ok(vec![0x42, dir]),
+            Instruction::OrlDirectData(dir, data) => Ok(vec![0x43, dir, data]),
+            Instruction::OrlCBit(bit) => Ok(vec![0x72, bit]),
+            Instruction::OrlCNegBit(bit) => Ok(vec![0xA0, bit]),
+            Instruction::PopDirect(dir) => Ok(vec![0xD0, dir]),
+            Instruction::PushDirect(dir) => Ok(vec![0xC0, dir]),
+            Instruction::Ret => Ok(vec![0x22]),
+            Instruction::Reti => Ok(vec![0x32]),
+            Instruction::RlA => Ok(vec![0x23]),
+            Instruction::RlcA => Ok(vec![0x33]),
+            Instruction::RrA => Ok(vec![0x03]),
+            Instruction::RrcA => Ok(vec![0x13]),
+            Instruction::SetbC => Ok(vec![0xD3]),
+            Instruction::SetbBit(bit) => Ok(vec![0xD2, bit]),
+            Instruction::Sjmp(ref addr) => {
+                let addr = addr.to_u16(labels)? - (cur_addr + 2);
+                Ok(vec![0x80, addr as u8])
+            }
+            Instruction::SubbAReg(r) => Ok(vec![0x98 | r]),
+            Instruction::SubbADirect(dir) => Ok(vec![0x95, dir]),
+            Instruction::SubbAIndirReg(r) => Ok(vec![0x96 | r]),
+            Instruction::SubbAData(data) => Ok(vec![0x94, data]),
+            Instruction::SwapA => Ok(vec![0xC4]),
+            Instruction::XchAReg(r) => Ok(vec![0xC8 | r]),
+            Instruction::XchADirect(dir) => Ok(vec![0xC5, dir]),
+            Instruction::XchAIndirReg(r) => Ok(vec![0xC6 | r]),
+            Instruction::XchdAIndirReg(r) => Ok(vec![0xD6 | r]),
+            Instruction::XrlAReg(r) => Ok(vec![0x68 | r]),
+            Instruction::XrlADirect(dir) => Ok(vec![0x65, dir]),
+            Instruction::XrlAIndirReg(r) => Ok(vec![0x66 | r]),
+            Instruction::XrlAData(data) => Ok(vec![0x64, data]),
+            Instruction::XrlDirectA(dir) => Ok(vec![0x62, dir]),
+            Instruction::XrlDirectData(dir, data) => Ok(vec![0x63, dir, data]),
+            Instruction::Bytes(ref b) => Ok(b.clone()),
         }
     }
 }
