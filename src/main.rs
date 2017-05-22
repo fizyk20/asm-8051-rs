@@ -24,7 +24,6 @@ fn main() {
                 return;
             }
         };
-        println!("Tokens: {:?}\n", tokens);
 
         let program = match ParserState::parse(tokens) {
             Ok(program) => program,
@@ -33,7 +32,6 @@ fn main() {
                 return;
             }
         };
-        println!("Program: {:?}\n", program);
 
         let mir = match Mir::from_program(program) {
             Ok(mir) => mir,
@@ -42,6 +40,6 @@ fn main() {
                 return;
             }
         };
-        println!("MIR: {:?}\n", mir);
+        println!("{}", mir.gen_intel_hex());
     }
 }

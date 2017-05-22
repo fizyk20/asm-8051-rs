@@ -49,4 +49,29 @@ impl Mir {
                instructions: instructions,
            })
     }
+
+    fn intel_hex(addr: u16, bytes: Vec<u8>) -> String {
+        let mut result = format!(":{:02X}{:04X}00", bytes.len() as u8, addr);
+        let mut sum: u8 = (bytes.len() as u8)
+            .wrapping_add((addr / 256) as u8)
+            .wrapping_add((addr % 256) as u8);
+        for b in bytes.into_iter() {
+            result.push_str(&format!("{:02X}", b));
+            sum = sum.wrapping_add(b);
+        }
+        result.push_str(&format!("{:02X}\n", (0x100 - sum as u16) as u8));
+        result
+    }
+
+    pub fn gen_intel_hex(&self) -> String {
+        let mut result = String::new();
+        for &(addr, ref instruction) in self.instructions.iter() {
+            let bytes = instruction
+                .to_bytes(&self.labels, addr)
+                .unwrap_or_else(|e| panic!("ERROR: {:?}", e));
+            result.push_str(&Self::intel_hex(addr, bytes));
+        }
+        result.push_str(":00000001FF\n");
+        result
+    }
 }

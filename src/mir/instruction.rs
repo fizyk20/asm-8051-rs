@@ -965,19 +965,19 @@ impl Instruction {
             Instruction::AnlCBit(bit) => Ok(vec![0x82, bit]),
             Instruction::AnlCNegBit(bit) => Ok(vec![0xB0, bit]),
             Instruction::CjneADirRel(dir, ref addr) => {
-                let addr = addr.to_u16(labels)? - (cur_addr + 3);
+                let addr = addr.to_u16(labels)?.wrapping_sub(cur_addr + 3);
                 Ok(vec![0xB5, dir, addr as u8])
             }
             Instruction::CjneADataRel(data, ref addr) => {
-                let addr = addr.to_u16(labels)? - (cur_addr + 3);
+                let addr = addr.to_u16(labels)?.wrapping_sub(cur_addr + 3);
                 Ok(vec![0xB4, data, addr as u8])
             }
             Instruction::CJneRegDataRel(r, data, ref addr) => {
-                let addr = addr.to_u16(labels)? - (cur_addr + 3);
+                let addr = addr.to_u16(labels)?.wrapping_sub(cur_addr + 3);
                 Ok(vec![0xB8 | r, data, addr as u8])
             }
             Instruction::CjneIndirRegDataRel(r, data, ref addr) => {
-                let addr = addr.to_u16(labels)? - (cur_addr + 3);
+                let addr = addr.to_u16(labels)?.wrapping_sub(cur_addr + 3);
                 Ok(vec![0xB6 | r, data, addr as u8])
             }
             Instruction::ClrA => Ok(vec![0xE4]),
@@ -993,11 +993,11 @@ impl Instruction {
             Instruction::DecIndirReg(r) => Ok(vec![0x16 | r]),
             Instruction::DivAB => Ok(vec![0x84]),
             Instruction::DjnzRegRel(r, ref addr) => {
-                let addr = addr.to_u16(labels)? - (cur_addr + 2);
+                let addr = addr.to_u16(labels)?.wrapping_sub(cur_addr + 2);
                 Ok(vec![0xD8 | r, addr as u8])
             }
             Instruction::DjnzDirectRel(dir, ref addr) => {
-                let addr = addr.to_u16(labels)? - (cur_addr + 3);
+                let addr = addr.to_u16(labels)?.wrapping_sub(cur_addr + 3);
                 Ok(vec![0xD5, dir, addr as u8])
             }
             Instruction::IncA => Ok(vec![0x04]),
@@ -1006,32 +1006,32 @@ impl Instruction {
             Instruction::IncIndirReg(r) => Ok(vec![0x06 | r]),
             Instruction::IncDptr => Ok(vec![0xA3]),
             Instruction::JbBitRel(bit, ref addr) => {
-                let addr = addr.to_u16(labels)? - (cur_addr + 3);
+                let addr = addr.to_u16(labels)?.wrapping_sub(cur_addr + 3);
                 Ok(vec![0x20, bit, addr as u8])
             }
             Instruction::JbcBitRel(bit, ref addr) => {
-                let addr = addr.to_u16(labels)? - (cur_addr + 3);
+                let addr = addr.to_u16(labels)?.wrapping_sub(cur_addr + 3);
                 Ok(vec![0x10, bit, addr as u8])
             }
             Instruction::JcRel(ref addr) => {
-                let addr = addr.to_u16(labels)? - (cur_addr + 2);
+                let addr = addr.to_u16(labels)?.wrapping_sub(cur_addr + 2);
                 Ok(vec![0x40, addr as u8])
             }
             Instruction::JmpIndirAPlusDptr => Ok(vec![0x73]),
             Instruction::JnbBitRel(bit, ref addr) => {
-                let addr = addr.to_u16(labels)? - (cur_addr + 3);
+                let addr = addr.to_u16(labels)?.wrapping_sub(cur_addr + 3);
                 Ok(vec![0x30, bit, addr as u8])
             }
             Instruction::JncRel(ref addr) => {
-                let addr = addr.to_u16(labels)? - (cur_addr + 2);
+                let addr = addr.to_u16(labels)?.wrapping_sub(cur_addr + 2);
                 Ok(vec![0x50, addr as u8])
             }
             Instruction::JnzRel(ref addr) => {
-                let addr = addr.to_u16(labels)? - (cur_addr + 2);
+                let addr = addr.to_u16(labels)?.wrapping_sub(cur_addr + 2);
                 Ok(vec![0x70, addr as u8])
             }
             Instruction::JzRel(ref addr) => {
-                let addr = addr.to_u16(labels)? - (cur_addr + 2);
+                let addr = addr.to_u16(labels)?.wrapping_sub(cur_addr + 2);
                 Ok(vec![0x60, addr as u8])
             }
             Instruction::Lcall(ref addr) => {
@@ -1090,7 +1090,7 @@ impl Instruction {
             Instruction::SetbC => Ok(vec![0xD3]),
             Instruction::SetbBit(bit) => Ok(vec![0xD2, bit]),
             Instruction::Sjmp(ref addr) => {
-                let addr = addr.to_u16(labels)? - (cur_addr + 2);
+                let addr = addr.to_u16(labels)?.wrapping_sub(cur_addr + 2);
                 Ok(vec![0x80, addr as u8])
             }
             Instruction::SubbAReg(r) => Ok(vec![0x98 | r]),
