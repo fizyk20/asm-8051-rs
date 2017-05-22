@@ -1,6 +1,7 @@
 use parser::ast::Operand;
-use parser::keywords::*;
+use parser::keywords::{Operator, Register as Reg};
 
+#[derive(Clone, PartialEq)]
 pub enum Address {
     Number(u16),
     Label(String),
@@ -281,17 +282,18 @@ impl Instruction {
     pub fn from_code(operator: Operator,
                      operands: Vec<Operand>)
                      -> Result<Instruction, InstructionError> {
+        use self::Operand::*;
         match operator {
             Operator::Acall => {
                 Self::expect_operands(operator, &operands, 1)?;
                 let address = match operands[0] {
-                    Operand::Immediate(addr) => {
+                    Immediate(addr) => {
                         if addr < 0 || addr > 2048 {
                             return Self::invalid_operand(operator, operands[0].clone(), 0);
                         }
                         Address::Number(addr as u16)
                     }
-                    Operand::ImmediateId(ref id) => Address::Label(id.clone()),
+                    ImmediateId(ref id) => Address::Label(id.clone()),
                     _ => {
                         return Self::invalid_operand(operator, operands[0].clone(), 0);
                     }
@@ -300,19 +302,19 @@ impl Instruction {
             }
             Operator::Add => {
                 Self::expect_operands(operator, &operands, 2)?;
-                if operands[0] != Operand::Register(Register::A) {
+                if operands[0] != Operand::Register(Reg::A) {
                     return Self::invalid_operand(operator, operands[0].clone(), 0);
                 }
                 match operands[1] {
-                    Operand::Register(Register::R(r)) => Ok(Instruction::AddAReg(r)),
-                    Operand::Direct(dir) => Ok(Instruction::AddADirect(dir)),
-                    Operand::IndirectReg(Register::R(r)) => {
+                    Register(Reg::R(r)) => Ok(Instruction::AddAReg(r)),
+                    Direct(dir) => Ok(Instruction::AddADirect(dir)),
+                    IndirectReg(Reg::R(r)) => {
                         if r > 1 {
                             return Self::invalid_operand(operator, operands[1].clone(), 1);
                         }
                         Ok(Instruction::AddAIndirReg(r))
                     }
-                    Operand::Immediate(imm) => {
+                    Immediate(imm) => {
                         if imm < -128 || imm > 255 {
                             return Self::invalid_operand(operator, operands[1].clone(), 1);
                         }
@@ -325,19 +327,19 @@ impl Instruction {
             }
             Operator::Addc => {
                 Self::expect_operands(operator, &operands, 2)?;
-                if operands[0] != Operand::Register(Register::A) {
+                if operands[0] != Operand::Register(Reg::A) {
                     return Self::invalid_operand(operator, operands[0].clone(), 0);
                 }
                 match operands[1] {
-                    Operand::Register(Register::R(r)) => Ok(Instruction::AddcAReg(r)),
-                    Operand::Direct(dir) => Ok(Instruction::AddcADirect(dir)),
-                    Operand::IndirectReg(Register::R(r)) => {
+                    Register(Reg::R(r)) => Ok(Instruction::AddcAReg(r)),
+                    Direct(dir) => Ok(Instruction::AddcADirect(dir)),
+                    IndirectReg(Reg::R(r)) => {
                         if r > 1 {
                             return Self::invalid_operand(operator, operands[1].clone(), 1);
                         }
                         Ok(Instruction::AddcAIndirReg(r))
                     }
-                    Operand::Immediate(imm) => {
+                    Immediate(imm) => {
                         if imm < -128 || imm > 255 {
                             return Self::invalid_operand(operator, operands[1].clone(), 1);
                         }
@@ -351,13 +353,13 @@ impl Instruction {
             Operator::Ajmp => {
                 Self::expect_operands(operator, &operands, 1)?;
                 let address = match operands[0] {
-                    Operand::Immediate(addr) => {
+                    Immediate(addr) => {
                         if addr < 0 || addr > 2048 {
                             return Self::invalid_operand(operator, operands[0].clone(), 0);
                         }
                         Address::Number(addr as u16)
                     }
-                    Operand::ImmediateId(ref id) => Address::Label(id.clone()),
+                    ImmediateId(ref id) => Address::Label(id.clone()),
                     _ => {
                         return Self::invalid_operand(operator, operands[0].clone(), 0);
                     }
@@ -367,35 +369,28 @@ impl Instruction {
             Operator::Anl => {
                 Self::expect_operands(operator, &operands, 2)?;
                 match operands[0] {
-                    Operand::Register(Register::A) |
-                    Operand::Direct(_) => (),
+                    Register(Reg::A) | Direct(_) => (),
                     _ => {
                         return Self::invalid_operand(operator, operands[0].clone(), 0);
                     }
                 }
                 match (&operands[0], &operands[1]) {
-                    (&Operand::Register(Register::A), &Operand::Register(Register::R(r))) => {
-                        Ok(Instruction::AnlAReg(r))
-                    }
-                    (&Operand::Register(Register::A), &Operand::Direct(addr)) => {
-                        Ok(Instruction::AnlADirect(addr))
-                    }
-                    (&Operand::Register(Register::A), &Operand::IndirectReg(Register::R(r))) => {
+                    (&Register(Reg::A), &Register(Reg::R(r))) => Ok(Instruction::AnlAReg(r)),
+                    (&Register(Reg::A), &Direct(addr)) => Ok(Instruction::AnlADirect(addr)),
+                    (&Register(Reg::A), &IndirectReg(Reg::R(r))) => {
                         if r > 1 {
                             return Self::invalid_operand(operator, operands[1].clone(), 1);
                         }
                         Ok(Instruction::AnlAIndirReg(r))
                     }
-                    (&Operand::Register(Register::A), &Operand::Immediate(imm)) => {
+                    (&Register(Reg::A), &Immediate(imm)) => {
                         if imm < -128 || imm > 255 {
                             return Self::invalid_operand(operator, operands[1].clone(), 1);
                         }
                         Ok(Instruction::AnlAData(imm as u8))
                     }
-                    (&Operand::Direct(addr), &Operand::Register(Register::A)) => {
-                        Ok(Instruction::AnlADirect(addr))
-                    }
-                    (&Operand::Direct(addr), &Operand::Immediate(imm)) => {
+                    (&Direct(addr), &Register(Reg::A)) => Ok(Instruction::AnlADirect(addr)),
+                    (&Direct(addr), &Immediate(imm)) => {
                         if imm < -128 || imm > 255 {
                             return Self::invalid_operand(operator, operands[1].clone(), 1);
                         }
@@ -411,35 +406,134 @@ impl Instruction {
             }
             Operator::Cjne => {
                 Self::expect_operands(operator, &operands, 3)?;
-                Ok(Instruction::Nop)
+                match operands[0] {
+                    Register(Reg::A) |
+                    Register(Reg::R(_)) |
+                    IndirectReg(_) => (),
+                    _ => {
+                        return Self::invalid_operand(operator, operands[0].clone(), 0);
+                    }
+                }
+                let rel = match operands[2] {
+                    ImmediateId(ref addr) => Address::Label(addr.clone()),
+                    _ => {
+                        return Self::invalid_operand(operator, operands[2].clone(), 2);
+                    }
+                };
+                match (&operands[0], &operands[1]) {
+                    (&Register(Reg::A), &Direct(addr)) => Ok(Instruction::CjneADirRel(addr, rel)),
+                    (&Register(Reg::A), &Immediate(imm)) => {
+                        if imm < -128 || imm > 255 {
+                            return Self::invalid_operand(operator, operands[1].clone(), 1);
+                        }
+                        Ok(Instruction::CjneADataRel(imm as u8, rel))
+                    }
+                    (&Register(Reg::R(r)), &Immediate(imm)) => {
+                        if imm < -128 || imm > 255 {
+                            return Self::invalid_operand(operator, operands[1].clone(), 1);
+                        }
+                        Ok(Instruction::CJneRegDataRel(r, imm as u8, rel))
+                    }
+                    (&IndirectReg(Reg::R(r)), &Immediate(imm)) => {
+                        if r > 1 {
+                            return Self::invalid_operand(operator, operands[0].clone(), 0);
+                        }
+                        if imm < -128 || imm > 255 {
+                            return Self::invalid_operand(operator, operands[1].clone(), 1);
+                        }
+                        Ok(Instruction::CjneIndirRegDataRel(r, imm as u8, rel))
+                    }
+                    _ => {
+                        return Self::invalid_operand(operator, operands[1].clone(), 1);
+                    }
+                }
             }
             Operator::Clr => {
                 Self::expect_operands(operator, &operands, 1)?;
-                Ok(Instruction::Nop)
+                match operands[0] {
+                    Register(Reg::A) => Ok(Instruction::ClrA),
+                    Register(Reg::C) => Ok(Instruction::ClrC),
+                    Direct(addr) => Ok(Instruction::ClrBit(addr)),
+                    _ => {
+                        return Self::invalid_operand(operator, operands[0].clone(), 0);
+                    }
+                }
             }
             Operator::Cpl => {
                 Self::expect_operands(operator, &operands, 1)?;
-                Ok(Instruction::Nop)
+                match operands[0] {
+                    Register(Reg::A) => Ok(Instruction::CplA),
+                    Register(Reg::C) => Ok(Instruction::CplC),
+                    Direct(addr) => Ok(Instruction::CplBit(addr)),
+                    _ => {
+                        return Self::invalid_operand(operator, operands[0].clone(), 0);
+                    }
+                }
             }
             Operator::Da => {
                 Self::expect_operands(operator, &operands, 1)?;
-                Ok(Instruction::Nop)
+                match operands[0] {
+                    Register(Reg::A) => Ok(Instruction::DaA),
+                    _ => {
+                        return Self::invalid_operand(operator, operands[0].clone(), 0);
+                    }
+                }
             }
             Operator::Dec => {
                 Self::expect_operands(operator, &operands, 1)?;
-                Ok(Instruction::Nop)
+                match operands[0] {
+                    Register(Reg::A) => Ok(Instruction::DecA),
+                    Register(Reg::R(r)) => Ok(Instruction::DecReg(r)),
+                    Direct(addr) => Ok(Instruction::DecDirect(addr)),
+                    IndirectReg(Reg::R(r)) => Ok(Instruction::DecIndirReg(r)),
+                    _ => {
+                        return Self::invalid_operand(operator, operands[0].clone(), 0);
+                    }
+                }
             }
             Operator::Div => {
                 Self::expect_operands(operator, &operands, 2)?;
-                Ok(Instruction::Nop)
+                match operands[0] {
+                    Register(Reg::A) => {
+                        if operands[1] == Direct(0xF0) {
+                            Ok(Instruction::DivAB)
+                        } else {
+                            return Self::invalid_operand(operator, operands[1].clone(), 1);
+                        }
+                    }
+                    _ => {
+                        return Self::invalid_operand(operator, operands[0].clone(), 0);
+                    }
+                }
             }
             Operator::Djnz => {
                 Self::expect_operands(operator, &operands, 2)?;
-                Ok(Instruction::Nop)
+                let rel = match operands[1] {
+                    ImmediateId(ref addr) => Address::Label(addr.clone()),
+                    _ => {
+                        return Self::invalid_operand(operator, operands[1].clone(), 1);
+                    }
+                };
+                match operands[0] {
+                    Register(Reg::R(r)) => Ok(Instruction::DjnzRegRel(r, rel)),
+                    Direct(addr) => Ok(Instruction::DjnzDirectRel(addr, rel)),
+                    _ => {
+                        return Self::invalid_operand(operator, operands[0].clone(), 0);
+                    }
+                }
             }
             Operator::Inc => {
                 Self::expect_operands(operator, &operands, 1)?;
-                Ok(Instruction::Nop)
+                match operands[0] {
+                    Register(Reg::A) => Ok(Instruction::IncA),
+                    Register(Reg::R(r)) => Ok(Instruction::IncReg(r)),
+                    Direct(addr) => Ok(Instruction::IncDirect(addr)),
+                    IndirectReg(Reg::R(r)) => Ok(Instruction::IncIndirReg(r)),
+                    Register(Reg::DPTR) => Ok(Instruction::IncDptr),
+                    _ => {
+                        return Self::invalid_operand(operator, operands[0].clone(), 0);
+                    }
+                }
             }
             Operator::Jb => {
                 Self::expect_operands(operator, &operands, 2)?;
@@ -495,7 +589,18 @@ impl Instruction {
             }
             Operator::Mul => {
                 Self::expect_operands(operator, &operands, 2)?;
-                Ok(Instruction::Nop)
+                match operands[0] {
+                    Register(Reg::A) => {
+                        if operands[1] == Direct(0xF0) {
+                            Ok(Instruction::MulAB)
+                        } else {
+                            return Self::invalid_operand(operator, operands[1].clone(), 1);
+                        }
+                    }
+                    _ => {
+                        return Self::invalid_operand(operator, operands[0].clone(), 0);
+                    }
+                }
             }
             Operator::Nop => {
                 Self::expect_operands(operator, &operands, 0)?;
