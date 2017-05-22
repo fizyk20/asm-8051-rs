@@ -2,6 +2,7 @@ use super::{Instruction, InstructionError};
 use parser::ast::{Line, LineBody, Program};
 use std::collections::HashMap;
 
+#[derive(Debug)]
 pub struct Mir {
     labels: HashMap<String, u16>,
     instructions: Vec<(u16, Instruction)>,

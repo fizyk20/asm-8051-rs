@@ -202,12 +202,17 @@ impl<'a> ParserState<'a> {
         let mut cur_state = self;
 
         if cur_state.current_token()?.is_identifier() &&
-           cur_state.current_token()?.get_string().unwrap() == "org" {
+           cur_state
+               .current_token()?
+               .get_string()
+               .unwrap()
+               .to_lowercase() == "org" {
             cur_state = cur_state.advanced();
             let ParseResult {
                 state: cur_state,
                 result: number,
             } = cur_state.parse_number()?;
+            let cur_state = cur_state.expect_newline()?;
             return Ok(ParseResult {
                           state: cur_state,
                           result: Line::OrgLine { address: Self::to_word(number)? },
@@ -216,22 +221,20 @@ impl<'a> ParserState<'a> {
 
         let result_label = cur_state.clone().parse_label();
 
-        let label;
-        if let Ok(parse_result_label) = result_label {
+        let label = if let Ok(parse_result_label) = result_label {
             cur_state = parse_result_label.state;
-            label = Some(parse_result_label.result);
+            Some(parse_result_label.result)
         } else {
-            label = None;
-        }
+            None
+        };
 
         let result_lbody = cur_state.clone().parse_line_body();
-        let lbody;
-        if let Ok(parse_result_lbody) = result_lbody {
+        let lbody = if let Ok(parse_result_lbody) = result_lbody {
             cur_state = parse_result_lbody.state;
-            lbody = Some(parse_result_lbody.result);
+            Some(parse_result_lbody.result)
         } else {
-            lbody = None;
-        }
+            None
+        };
 
         let newline_result = cur_state.expect_newline()?;
         Ok(ParseResult {

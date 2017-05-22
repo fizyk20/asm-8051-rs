@@ -76,7 +76,7 @@ impl FromStr for Operator {
             "jnb" => Ok(Operator::Jnb),
             "jnc" => Ok(Operator::Jnc),
             "jnz" => Ok(Operator::Jnz),
-            "jz," => Ok(Operator::Jz),
+            "jz" => Ok(Operator::Jz),
             "lcall" => Ok(Operator::Lcall),
             "ljmp" => Ok(Operator::Ljmp),
             "mov" => Ok(Operator::Mov),
