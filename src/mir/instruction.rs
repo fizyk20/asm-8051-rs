@@ -659,7 +659,7 @@ impl Instruction {
                     (&Direct(addr), &IndirectReg(Reg::R(r))) if r < 2 => {
                         Ok(Instruction::MovDirectIndirReg(addr, r))
                     }
-                    (&Direct(addr), &Immediate(imm)) if imm >= -128 && imm < 255 => {
+                    (&Direct(addr), &Immediate(imm)) if imm >= -128 && imm <= 255 => {
                         Ok(Instruction::MovDirectData(addr, imm as u8))
                     }
                     (&IndirectReg(Reg::R(r)), &Register(Reg::A)) if r < 2 => {
