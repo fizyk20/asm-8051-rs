@@ -1,3 +1,4 @@
+use super::keywords::{DirectLocation, Keyword, Operator};
 use std::error;
 use std::fmt::Display;
 use std::io::{self, Write};
@@ -14,6 +15,9 @@ pub struct Position {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token {
     Identifier(String, Position),
+    Operator(Operator, Position),
+    DirectLocation(DirectLocation, Position),
+    Keyword(Keyword, Position),
     Number(String, Position),
     String(String, Position),
     Colon(Position),
@@ -92,6 +96,9 @@ impl Token {
     pub fn get_position(&self) -> Position {
         match *self {
             Token::Identifier(_, p) => p,
+            Token::Operator(_, p) => p,
+            Token::DirectLocation(_, p) => p,
+            Token::Keyword(_, p) => p,
             Token::Number(_, p) => p,
             Token::String(_, p) => p,
             Token::Colon(p) => p,
@@ -319,6 +326,19 @@ impl Tokenizer {
         }
     }
 
+    fn categorize_identifier(v: Vec<char>, p: Position) -> Token {
+        let s: String = v.into_iter().collect();
+        if let Ok(kw) = s.parse::<Keyword>() {
+            Token::Keyword(kw, p)
+        } else if let Ok(dir) = s.parse::<DirectLocation>() {
+            Token::DirectLocation(dir, p)
+        } else if let Ok(oper) = s.parse::<Operator>() {
+            Token::Operator(oper, p)
+        } else {
+            Token::Identifier(s, p)
+        }
+    }
+
     fn handle_identifier(&mut self,
                          mut v: Vec<char>,
                          p: Position,
@@ -333,8 +353,7 @@ impl Tokenizer {
             }
 
             _ => {
-                self.tokens
-                    .push(Token::Identifier(v.into_iter().collect(), p));
+                self.tokens.push(Self::categorize_identifier(v, p));
                 self.state = TokenizerState::Ready;
                 self.consume_char(c)
             }
@@ -459,8 +478,7 @@ impl Write for Tokenizer {
             }
 
             TokenizerState::ReadingIdentifier(v, p) => {
-                self.tokens
-                    .push(Token::Identifier(v.into_iter().collect(), p));
+                self.tokens.push(Self::categorize_identifier(v, p));
                 self.state = TokenizerState::Ready;
             }
 
@@ -497,7 +515,7 @@ mod tests {
                 assert_eq!(pos.row, 1);
                 assert_eq!(pos.column, 1);
             } else {
-                panic!("result[0] is not an Identifier!");
+                panic!("result[0]: expected Identifier, found {:?}", result[0]);
             }
 
             // :
@@ -505,7 +523,7 @@ mod tests {
                 assert_eq!(pos.row, 1);
                 assert_eq!(pos.column, 6);
             } else {
-                panic!("result[1] is not a Colon!");
+                panic!("result[1]: expected Colon, found {:?}", result[1]);
             }
 
             // operator
@@ -514,7 +532,7 @@ mod tests {
                 assert_eq!(pos.row, 1);
                 assert_eq!(pos.column, 8);
             } else {
-                panic!("result[2] is not an Identifier!");
+                panic!("result[2]: expected Identifier, found {:?}", result[2]);
             }
 
             // operand1
@@ -523,7 +541,7 @@ mod tests {
                 assert_eq!(pos.row, 1);
                 assert_eq!(pos.column, 17);
             } else {
-                panic!("result[3] is not an Identifier!");
+                panic!("result[3]: expected Identifier, found {:?}", result[3]);
             }
 
             // ,
@@ -531,7 +549,7 @@ mod tests {
                 assert_eq!(pos.row, 1);
                 assert_eq!(pos.column, 25);
             } else {
-                panic!("result[4] is not a Comma!");
+                panic!("result[4]: expected Comma, found {:?}", result[4]);
             }
 
             // 0EFh
@@ -540,7 +558,7 @@ mod tests {
                 assert_eq!(pos.row, 1);
                 assert_eq!(pos.column, 27);
             } else {
-                panic!("result[5] is not a Number!");
+                panic!("result[5]: expected Number, found {:?}", result[5]);
             }
         } else {
             panic!("Tokenization failed!");
@@ -554,12 +572,12 @@ mod tests {
             assert_eq!(result.len(), 7);
 
             // mov
-            if let Token::Identifier(ref s, pos) = result[0] {
-                assert_eq!(s, "mov");
+            if let Token::Operator(oper, pos) = result[0] {
+                assert_eq!(oper, Operator::Mov);
                 assert_eq!(pos.row, 1);
                 assert_eq!(pos.column, 1);
             } else {
-                panic!("result[0] is not an Identifier!");
+                panic!("result[0]: expected Operator, found {:?}", result[0]);
             }
 
             // a
@@ -568,7 +586,7 @@ mod tests {
                 assert_eq!(pos.row, 1);
                 assert_eq!(pos.column, 5);
             } else {
-                panic!("result[1] is not an Identifier!");
+                panic!("result[1]: expected Identifier, found {:?}", result[1]);
             }
 
             // ,
@@ -576,7 +594,7 @@ mod tests {
                 assert_eq!(pos.row, 1);
                 assert_eq!(pos.column, 6);
             } else {
-                panic!("result[2] is not a Comma!");
+                panic!("result[2]: expected Comma, found {:?}", result[2]);
             }
 
             // #
@@ -584,7 +602,7 @@ mod tests {
                 assert_eq!(pos.row, 1);
                 assert_eq!(pos.column, 8);
             } else {
-                panic!("result[3] is not a Hash!");
+                panic!("result[3]: expected Hash, found {:?}", result[3]);
             }
 
             // 20h
@@ -593,7 +611,7 @@ mod tests {
                 assert_eq!(pos.row, 1);
                 assert_eq!(pos.column, 9);
             } else {
-                panic!("result[4] is not a Number!");
+                panic!("result[4]: expected Number, found {:?}", result[4]);
             }
 
             // \n
@@ -601,16 +619,16 @@ mod tests {
                 assert_eq!(pos.row, 1);
                 assert_eq!(pos.column, 12);
             } else {
-                panic!("result[5] is not a Newline!");
+                panic!("result[5]: expected Newline, found {:?}", result[5]);
             }
 
             // ret
-            if let Token::Identifier(ref s, pos) = result[6] {
-                assert_eq!(s, "ret");
+            if let Token::Operator(oper, pos) = result[6] {
+                assert_eq!(oper, Operator::Ret);
                 assert_eq!(pos.row, 2);
                 assert_eq!(pos.column, 1);
             } else {
-                panic!("result[6] is not an Identifier!");
+                panic!("result[6]: expected Operator, found {:?}", result[6]);
             }
         } else {
             panic!("Tokenization failed!");
@@ -627,7 +645,7 @@ mod tests {
                 assert_eq!(pos.row, 1);
                 assert_eq!(pos.column, 1);
             } else {
-                panic!("result[0] is not a String!");
+                panic!("result[0]: expected String, found {:?}", result[0]);
             }
         } else {
             panic!("Tokenization failed!");
@@ -644,7 +662,7 @@ mod tests {
                 assert_eq!(pos.row, 1);
                 assert_eq!(pos.column, 1);
             } else {
-                panic!("result[0] is not a String!");
+                panic!("result[0]: expected String, found {:?}", result[0]);
             }
         } else {
             panic!("Tokenization failed!");
@@ -661,7 +679,7 @@ mod tests {
                 assert_eq!(pos.row, 1);
                 assert_eq!(pos.column, 1);
             } else {
-                panic!("result[0] is not a String!");
+                panic!("result[0]: expected String, found {:?}", result[0]);
             }
         } else {
             panic!("Tokenization failed!");

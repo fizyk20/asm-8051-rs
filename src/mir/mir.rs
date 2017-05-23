@@ -5,18 +5,24 @@ use std::collections::HashMap;
 #[derive(Debug)]
 pub struct Mir {
     labels: HashMap<String, u16>,
+    equ_defs: HashMap<String, i32>,
     instructions: Vec<(u16, Instruction)>,
 }
 
 impl Mir {
     pub fn from_program(program: Program) -> Result<Self, InstructionError> {
         let mut labels = HashMap::new();
+        let mut equ_defs = HashMap::new();
         let mut instructions = Vec::new();
         let mut current_address = 0;
         for line in program.lines.into_iter() {
             let (label, body) = match line {
                 Line::OrgLine { address } => {
                     current_address = address;
+                    continue;
+                }
+                Line::EquDef { id, value } => {
+                    equ_defs.insert(id, value);
                     continue;
                 }
                 Line::ProgramLine { label, body } => (label, body),
@@ -46,6 +52,7 @@ impl Mir {
         }
         Ok(Mir {
                labels: labels,
+               equ_defs: equ_defs,
                instructions: instructions,
            })
     }
@@ -59,7 +66,7 @@ impl Mir {
             result.push_str(&format!("{:02X}", b));
             sum = sum.wrapping_add(b);
         }
-        result.push_str(&format!("{:02X}\n", (0x100 - sum as u16) as u8));
+        result.push_str(&format!("{:02X}", (0x100 - sum as u16) as u8));
         result
     }
 
@@ -71,7 +78,7 @@ impl Mir {
                 .unwrap_or_else(|e| panic!("ERROR: {:?}", e));
             result.push_str(&Self::intel_hex(addr, bytes));
         }
-        result.push_str(":00000001FF\n");
+        result.push_str(":00000001FF");
         result
     }
 }

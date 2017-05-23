@@ -1,4 +1,4 @@
-use super::keywords::{Definition, Operator, Register};
+use super::keywords::{Definition, Keyword, Operator, Register};
 use super::lexer;
 use regex::Regex;
 
@@ -10,6 +10,7 @@ pub struct Program {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Line {
     OrgLine { address: u16 },
+    EquDef { id: String, value: i32 },
     ProgramLine {
         label: Option<Label>,
         body: Option<LineBody>,
@@ -60,6 +61,8 @@ pub enum ParseError {
     UnexpectedEof(lexer::Token),
     ExpectedNewline(lexer::Position),
     ExpectedIdentifier(lexer::Position),
+    ExpectedOperator(lexer::Position),
+    ExpectedKeyword(Keyword, lexer::Position),
     ExpectedNumber(lexer::Position),
     ExpectedColon(lexer::Position),
     ExpectedComma(lexer::Position),
@@ -71,7 +74,6 @@ pub enum ParseError {
     InvalidMnemonic(String, lexer::Position),
     InvalidOperand(lexer::Token),
     InvalidRegister(lexer::Token),
-    InvalidDirectId(lexer::Token),
     InvalidDirectAddr(u8),
     InvalidNumber(String),
     InvalidByte(i32),
@@ -118,6 +120,37 @@ impl<'a> ParserState<'a> {
         ParserState {
             tokens: self.tokens,
             position: self.position + 1,
+        }
+    }
+
+    fn expect_keyword(self, kw: Keyword) -> Result<ParserState<'a>> {
+        let cur_tok = self.current_token()?;
+        if let lexer::Token::Keyword(kw2, _) = cur_tok {
+            if kw2 == kw {
+                Ok(self.advanced())
+            } else {
+                Err(ParseError::ExpectedKeyword(kw, cur_tok.get_position()))
+            }
+        } else {
+            Err(ParseError::ExpectedKeyword(kw, cur_tok.get_position()))
+        }
+    }
+
+    fn expect_identifier(self) -> Result<(ParserState<'a>, String)> {
+        let cur_tok = self.current_token()?;
+        if let lexer::Token::Identifier(s, _) = cur_tok {
+            Ok((self.advanced(), s))
+        } else {
+            Err(ParseError::ExpectedIdentifier(cur_tok.get_position()))
+        }
+    }
+
+    fn expect_operator(self) -> Result<(ParserState<'a>, Operator)> {
+        let cur_tok = self.current_token()?;
+        if let lexer::Token::Operator(oper, _) = cur_tok {
+            Ok((self.advanced(), oper))
+        } else {
+            Err(ParseError::ExpectedOperator(cur_tok.get_position()))
         }
     }
 
@@ -201,22 +234,14 @@ impl<'a> ParserState<'a> {
     fn parse_line(self) -> Result<ParseResult<'a, Line>> {
         let mut cur_state = self;
 
-        if cur_state.current_token()?.is_identifier() &&
-           cur_state
-               .current_token()?
-               .get_string()
-               .unwrap()
-               .to_lowercase() == "org" {
-            cur_state = cur_state.advanced();
-            let ParseResult {
-                state: cur_state,
-                result: number,
-            } = cur_state.parse_number()?;
-            let cur_state = cur_state.expect_newline()?;
-            return Ok(ParseResult {
-                          state: cur_state,
-                          result: Line::OrgLine { address: Self::to_word(number)? },
-                      });
+        let result = cur_state.clone().parse_org_line();
+        if result.is_ok() {
+            return result;
+        }
+
+        let result = cur_state.clone().parse_equ_def();
+        if result.is_ok() {
+            return result;
         }
 
         let result_label = cur_state.clone().parse_label();
@@ -242,6 +267,40 @@ impl<'a> ParserState<'a> {
                result: Line::ProgramLine {
                    label: label,
                    body: lbody,
+               },
+           })
+    }
+
+    fn parse_org_line(self) -> Result<ParseResult<'a, Line>> {
+        let cur_state = self.expect_keyword(Keyword::Org)?;
+
+        let ParseResult {
+            state: cur_state,
+            result: number,
+        } = cur_state.parse_number()?;
+
+        let cur_state = cur_state.expect_newline()?;
+
+        Ok(ParseResult {
+               state: cur_state,
+               result: Line::OrgLine { address: number as u16 },
+           })
+    }
+
+    fn parse_equ_def(self) -> Result<ParseResult<'a, Line>> {
+        let (cur_state, id) = self.expect_identifier()?;
+        let cur_state = cur_state.expect_keyword(Keyword::Equ)?;
+        let ParseResult {
+            state: cur_state,
+            result: number,
+        } = cur_state.parse_number()?;
+
+        let cur_state = cur_state.expect_newline()?;
+        Ok(ParseResult {
+               state: cur_state,
+               result: Line::EquDef {
+                   id: id,
+                   value: number,
                },
            })
     }
@@ -283,10 +342,7 @@ impl<'a> ParserState<'a> {
     }
 
     fn parse_code_line(self) -> Result<ParseResult<'a, LineBody>> {
-        let ParseResult {
-            state: cur_state,
-            result: operator,
-        } = self.parse_operator()?;
+        let (cur_state, operator) = self.expect_operator()?;
 
         let mut operands = Vec::new();
 
@@ -323,24 +379,6 @@ impl<'a> ParserState<'a> {
                    operator: operator,
                    operands: operands,
                },
-           })
-    }
-
-    fn parse_operator(self) -> Result<ParseResult<'a, Operator>> {
-        let cur_tok = self.current_token()?;
-        if !cur_tok.is_identifier() {
-            return Err(ParseError::ExpectedIdentifier(cur_tok.get_position()));
-        }
-
-        let oper_str = cur_tok.get_string().unwrap();
-        let operator = oper_str.parse();
-        if operator.is_err() {
-            return Err(ParseError::InvalidMnemonic(oper_str, cur_tok.get_position()));
-        }
-
-        Ok(ParseResult {
-               state: self.advanced(),
-               result: operator.unwrap(),
            })
     }
 
@@ -506,8 +544,8 @@ impl<'a> ParserState<'a> {
     fn parse_direct(self) -> Result<ParseResult<'a, Operand>> {
         let cur_state = self;
         let cur_tok = cur_state.current_token()?;
-        let (mut cur_state, mut address) = if cur_tok.is_identifier() {
-            (cur_state.advanced(), Self::direct_id_to_addr(cur_tok)?)
+        let (mut cur_state, mut address) = if let lexer::Token::DirectLocation(dir, _) = cur_tok {
+            (cur_state.advanced(), dir.get_addr())
         } else if cur_tok.is_number() {
             let ParseResult {
                 state: cur_state,
@@ -664,25 +702,6 @@ impl<'a> ParserState<'a> {
             Ok(word as u16)
         } else {
             Err(ParseError::InvalidWord(word))
-        }
-    }
-
-    fn direct_id_to_addr(id: lexer::Token) -> Result<u8> {
-        match id.get_string().unwrap().to_lowercase().as_ref() {
-            "p0" => Ok(0x80),
-            "p1" => Ok(0x90),
-            "p2" => Ok(0xA0),
-            "p3" => Ok(0xB0),
-            "p4" => Ok(0xE8),
-            "p5" => Ok(0xF8),
-            "p6" => Ok(0xDB),
-            "sp" => Ok(0x81),
-            "th0" => Ok(0x8C),
-            "th1" => Ok(0x8D),
-            "psw" => Ok(0xD0),
-            "acc" => Ok(0xE0),
-            "b" => Ok(0xF0),
-            _ => Err(ParseError::InvalidDirectId(id)),
         }
     }
 
