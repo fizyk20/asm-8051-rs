@@ -583,7 +583,7 @@ mod tests {
 
     #[test]
     fn test_tokenize2() {
-        let text = "mov a, #20h\nret";
+        let text = "mov a, 20h\nret";
         if let Ok(result) = Tokenizer::tokenize(text) {
             assert_eq!(result.len(), 7);
 
@@ -613,21 +613,13 @@ mod tests {
                 panic!("result[2]: expected Comma, found {:?}", result[2]);
             }
 
-            // #
-            if let Token::Hash(pos) = result[3] {
-                assert_eq!(pos.row, 1);
-                assert_eq!(pos.column, 8);
-            } else {
-                panic!("result[3]: expected Hash, found {:?}", result[3]);
-            }
-
             // 20h
-            if let Token::Number(ref s, pos) = result[4] {
+            if let Token::Number(ref s, pos) = result[3] {
                 assert_eq!(s, "20h");
                 assert_eq!(pos.row, 1);
                 assert_eq!(pos.column, 9);
             } else {
-                panic!("result[4]: expected Number, found {:?}", result[4]);
+                panic!("result[3]: expected Number, found {:?}", result[3]);
             }
 
             // \n
@@ -635,16 +627,16 @@ mod tests {
                 assert_eq!(pos.row, 1);
                 assert_eq!(pos.column, 12);
             } else {
-                panic!("result[5]: expected Newline, found {:?}", result[5]);
+                panic!("result[4]: expected Newline, found {:?}", result[4]);
             }
 
             // ret
-            if let Token::Operator(oper, pos) = result[6] {
+            if let Token::Operator(oper, pos) = result[5] {
                 assert_eq!(oper, Operator::Ret);
                 assert_eq!(pos.row, 2);
                 assert_eq!(pos.column, 1);
             } else {
-                panic!("result[6]: expected Operator, found {:?}", result[6]);
+                panic!("result[5]: expected Operator, found {:?}", result[5]);
             }
         } else {
             panic!("Tokenization failed!");

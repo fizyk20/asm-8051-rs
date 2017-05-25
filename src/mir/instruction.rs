@@ -8,16 +8,46 @@ pub enum Address {
     Label(String),
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum Data {
+    Number(u8),
+    Identifier(String),
+}
+
 impl Address {
-    pub fn to_u16(&self, labels: &HashMap<String, u16>) -> Result<u16, InstructionError> {
-        match *self {
-            Address::Number(x) => Ok(x),
+    pub fn to_u16(&self, identifiers: &HashMap<String, i32>) -> Result<u16, InstructionError> {
+        let x = match *self {
+            Address::Number(x) => Ok(x as i32),
             Address::Label(ref s) => {
-                labels
+                identifiers
                     .get(s)
                     .map(|x| *x)
                     .ok_or(InstructionError::UnknownLabel(s.clone()))
             }
+        }?;
+        if x > 65535 || x < 0 {
+            Err(InstructionError::InvalidWord(x))
+        } else {
+            Ok(x as u16)
+        }
+    }
+}
+
+impl Data {
+    pub fn to_u8(&self, identifiers: &HashMap<String, i32>) -> Result<u8, InstructionError> {
+        let x = match *self {
+            Data::Number(x) => Ok(x as i32),
+            Data::Identifier(ref s) => {
+                identifiers
+                    .get(s)
+                    .map(|x| *x)
+                    .ok_or(InstructionError::UnknownLabel(s.clone()))
+            }
+        }?;
+        if x > 255 || x < 0 {
+            Err(InstructionError::InvalidByte(x))
+        } else {
+            Ok(x as u8)
         }
     }
 }
@@ -34,6 +64,9 @@ pub enum InstructionError {
         operand: Operand,
         pos: u8,
     },
+    InvalidByte(i32),
+    InvalidWord(i32),
+    DuplicateIdentifier(String),
     UnknownLabel(String),
 }
 
@@ -43,24 +76,24 @@ pub enum Instruction {
     AddAReg(u8),
     AddADirect(u8),
     AddAIndirReg(u8),
-    AddAData(u8),
+    AddAData(Data),
     AddcAReg(u8),
     AddcADirect(u8),
     AddcAIndirReg(u8),
-    AddcAData(u8),
+    AddcAData(Data),
     Ajmp(Address),
     AnlAReg(u8),
     AnlADirect(u8),
     AnlAIndirReg(u8),
-    AnlAData(u8),
+    AnlAData(Data),
     AnlDirectA(u8),
-    AnlDirectData(u8, u8),
+    AnlDirectData(u8, Data),
     AnlCBit(u8),
     AnlCNegBit(u8),
     CjneADirRel(u8, Address),
-    CjneADataRel(u8, Address),
-    CJneRegDataRel(u8, u8, Address),
-    CjneIndirRegDataRel(u8, u8, Address),
+    CjneADataRel(Data, Address),
+    CjneRegDataRel(u8, Data, Address),
+    CjneIndirRegDataRel(u8, Data, Address),
     ClrA,
     ClrC,
     ClrBit(u8),
@@ -93,18 +126,18 @@ pub enum Instruction {
     MovAReg(u8),
     MovADirect(u8),
     MovAIndirReg(u8),
-    MovAData(u8),
+    MovAData(Data),
     MovRegA(u8),
     MovRegDir(u8, u8),
-    MovRegData(u8, u8),
+    MovRegData(u8, Data),
     MovDirectA(u8),
     MovDirectReg(u8, u8),
     MovDirectDirect(u8, u8),
     MovDirectIndirReg(u8, u8),
-    MovDirectData(u8, u8),
+    MovDirectData(u8, Data),
     MovIndirRegA(u8),
     MovIndirRegDirect(u8, u8),
-    MovIndirRegData(u8, u8),
+    MovIndirRegData(u8, Data),
     MovCBit(u8),
     MovBitC(u8),
     MovDptrData(Address),
@@ -119,9 +152,9 @@ pub enum Instruction {
     OrlAReg(u8),
     OrlADirect(u8),
     OrlAIndirReg(u8),
-    OrlAData(u8),
+    OrlAData(Data),
     OrlDirectA(u8),
-    OrlDirectData(u8, u8),
+    OrlDirectData(u8, Data),
     OrlCBit(u8),
     OrlCNegBit(u8),
     PopDirect(u8),
@@ -138,7 +171,7 @@ pub enum Instruction {
     SubbAReg(u8),
     SubbADirect(u8),
     SubbAIndirReg(u8),
-    SubbAData(u8),
+    SubbAData(Data),
     SwapA,
     XchAReg(u8),
     XchADirect(u8),
@@ -147,9 +180,9 @@ pub enum Instruction {
     XrlAReg(u8),
     XrlADirect(u8),
     XrlAIndirReg(u8),
-    XrlAData(u8),
+    XrlAData(Data),
     XrlDirectA(u8),
-    XrlDirectData(u8, u8),
+    XrlDirectData(u8, Data),
     Bytes(Vec<u8>),
 }
 
@@ -176,7 +209,7 @@ impl Instruction {
             Instruction::AnlCNegBit(_) => 2,
             Instruction::CjneADirRel(_, _) => 3,
             Instruction::CjneADataRel(_, _) => 3,
-            Instruction::CJneRegDataRel(_, _, _) => 3,
+            Instruction::CjneRegDataRel(_, _, _) => 3,
             Instruction::CjneIndirRegDataRel(_, _, _) => 3,
             Instruction::ClrA => 1,
             Instruction::ClrC => 1,
@@ -323,8 +356,9 @@ impl Instruction {
                     Direct(dir) => Ok(Instruction::AddADirect(dir)),
                     IndirectReg(Reg::R(r)) if r < 2 => Ok(Instruction::AddAIndirReg(r)),
                     Immediate(imm) if imm >= -128 && imm <= 255 => {
-                        Ok(Instruction::AddAData(imm as u8))
+                        Ok(Instruction::AddAData(Data::Number(imm as u8)))
                     }
+                    ImmediateId(ref id) => Ok(Instruction::AddAData(Data::Identifier(id.clone()))),
                     _ => {
                         return Self::invalid_operand(operator, operands[1].clone(), 1);
                     }
@@ -340,8 +374,9 @@ impl Instruction {
                     Direct(dir) => Ok(Instruction::AddcADirect(dir)),
                     IndirectReg(Reg::R(r)) if r < 2 => Ok(Instruction::AddcAIndirReg(r)),
                     Immediate(imm) if imm >= -128 && imm <= 255 => {
-                        Ok(Instruction::AddcAData(imm as u8))
+                        Ok(Instruction::AddcAData(Data::Number(imm as u8)))
                     }
+                    ImmediateId(ref id) => Ok(Instruction::AddcAData(Data::Identifier(id.clone()))),
                     _ => {
                         return Self::invalid_operand(operator, operands[1].clone(), 1);
                     }
@@ -373,13 +408,19 @@ impl Instruction {
                         Ok(Instruction::AnlAIndirReg(r))
                     }
                     (&Register(Reg::A), &Immediate(imm)) if imm >= -128 && imm <= 255 => {
-                        Ok(Instruction::AnlAData(imm as u8))
+                        Ok(Instruction::AnlAData(Data::Number(imm as u8)))
+                    }
+                    (&Register(Reg::A), &ImmediateId(ref id)) => {
+                        Ok(Instruction::AnlAData(Data::Identifier(id.clone())))
                     }
                     (&Direct(addr), &Register(Reg::A)) => Ok(Instruction::AnlDirectA(addr)),
                     (&Direct(addr), &Immediate(imm)) if imm >= -128 && imm <= 255 => {
-                        Ok(Instruction::AnlDirectData(addr, imm as u8))
+                        Ok(Instruction::AnlDirectData(addr, Data::Number(imm as u8)))
                     }
-                    (&Register(Reg::C), &Direct(addr)) => Ok(Instruction::AnlCBit(addr)),
+                    (&Direct(addr), &ImmediateId(ref id)) => {
+                        Ok(Instruction::AnlDirectData(addr, Data::Identifier(id.clone())))
+                    }
+                    (&Register(Reg::C), &DirectBit(addr)) => Ok(Instruction::AnlCBit(addr)),
                     _ => {
                         return Self::invalid_operand(operator, operands[1].clone(), 1);
                     }
@@ -407,14 +448,23 @@ impl Instruction {
                 match (&operands[0], &operands[1]) {
                     (&Register(Reg::A), &Direct(addr)) => Ok(Instruction::CjneADirRel(addr, rel)),
                     (&Register(Reg::A), &Immediate(imm)) if imm >= -128 && imm <= 255 => {
-                        Ok(Instruction::CjneADataRel(imm as u8, rel))
+                        Ok(Instruction::CjneADataRel(Data::Number(imm as u8), rel))
+                    }
+                    (&Register(Reg::A), &ImmediateId(ref id)) => {
+                        Ok(Instruction::CjneADataRel(Data::Identifier(id.clone()), rel))
                     }
                     (&Register(Reg::R(r)), &Immediate(imm)) if imm >= -128 && imm <= 255 => {
-                        Ok(Instruction::CJneRegDataRel(r, imm as u8, rel))
+                        Ok(Instruction::CjneRegDataRel(r, Data::Number(imm as u8), rel))
+                    }
+                    (&Register(Reg::R(r)), &ImmediateId(ref id)) => {
+                        Ok(Instruction::CjneRegDataRel(r, Data::Identifier(id.clone()), rel))
                     }
                     (&IndirectReg(Reg::R(r)), &Immediate(imm)) if imm >= -128 && imm <= 255 &&
                                                                   r < 2 => {
-                        Ok(Instruction::CjneIndirRegDataRel(r, imm as u8, rel))
+                        Ok(Instruction::CjneIndirRegDataRel(r, Data::Number(imm as u8), rel))
+                    }
+                    (&IndirectReg(Reg::R(r)), &ImmediateId(ref id)) if r < 2 => {
+                        Ok(Instruction::CjneIndirRegDataRel(r, Data::Identifier(id.clone()), rel))
                     }
                     _ => {
                         return Self::invalid_operand(operator, operands[1].clone(), 1);
@@ -628,6 +678,7 @@ impl Instruction {
                     Register(Reg::DPTR) |
                     Register(Reg::R(_)) |
                     Direct(_) => (),
+                    DirectBit(_) => (),
                     IndirectReg(Reg::R(r)) if r < 2 => (),
                     _ => {
                         return Self::invalid_operand(operator, operands[0].clone(), 0);
@@ -642,12 +693,18 @@ impl Instruction {
                         Ok(Instruction::MovAIndirReg(r))
                     }
                     (&Register(Reg::A), &Immediate(imm)) if imm >= -128 && imm <= 255 => {
-                        Ok(Instruction::MovAData(imm as u8))
+                        Ok(Instruction::MovAData(Data::Number(imm as u8)))
+                    }
+                    (&Register(Reg::A), &ImmediateId(ref id)) => {
+                        Ok(Instruction::MovAData(Data::Identifier(id.clone())))
                     }
                     (&Register(Reg::R(r)), &Register(Reg::A)) => Ok(Instruction::MovRegA(r)),
                     (&Register(Reg::R(r)), &Direct(addr)) => Ok(Instruction::MovRegDir(r, addr)),
                     (&Register(Reg::R(r)), &Immediate(imm)) if imm >= -128 && imm <= 255 => {
-                        Ok(Instruction::MovRegData(r, imm as u8))
+                        Ok(Instruction::MovRegData(r, Data::Number(imm as u8)))
+                    }
+                    (&Register(Reg::R(r)), &ImmediateId(ref id)) => {
+                        Ok(Instruction::MovRegData(r, Data::Identifier(id.clone())))
                     }
                     (&Direct(addr), &Register(Reg::A)) if addr != 0xE0 => {
                         Ok(Instruction::MovDirectA(addr))
@@ -660,7 +717,10 @@ impl Instruction {
                         Ok(Instruction::MovDirectIndirReg(addr, r))
                     }
                     (&Direct(addr), &Immediate(imm)) if imm >= -128 && imm <= 255 => {
-                        Ok(Instruction::MovDirectData(addr, imm as u8))
+                        Ok(Instruction::MovDirectData(addr, Data::Number(imm as u8)))
+                    }
+                    (&Direct(addr), &ImmediateId(ref id)) => {
+                        Ok(Instruction::MovDirectData(addr, Data::Identifier(id.clone())))
                     }
                     (&IndirectReg(Reg::R(r)), &Register(Reg::A)) if r < 2 => {
                         Ok(Instruction::MovIndirRegA(r))
@@ -670,10 +730,13 @@ impl Instruction {
                     }
                     (&IndirectReg(Reg::R(r)), &Immediate(imm)) if r < 2 && imm >= -128 &&
                                                                   imm <= 255 => {
-                        Ok(Instruction::MovIndirRegData(r, imm as u8))
+                        Ok(Instruction::MovIndirRegData(r, Data::Number(imm as u8)))
                     }
-                    (&Register(Reg::C), &Direct(addr)) => Ok(Instruction::MovCBit(addr)),
-                    (&Direct(addr), &Register(Reg::C)) => Ok(Instruction::MovBitC(addr)),
+                    (&IndirectReg(Reg::R(r)), &ImmediateId(ref id)) if r < 2 => {
+                        Ok(Instruction::MovIndirRegData(r, Data::Identifier(id.clone())))
+                    }
+                    (&Register(Reg::C), &DirectBit(addr)) => Ok(Instruction::MovCBit(addr)),
+                    (&DirectBit(addr), &Register(Reg::C)) => Ok(Instruction::MovBitC(addr)),
                     (&Register(Reg::DPTR), &Immediate(addr)) if addr >= 0 && addr < 65536 => {
                         Ok(Instruction::MovDptrData(Address::Number(addr as u16)))
                     }
@@ -759,13 +822,19 @@ impl Instruction {
                         Ok(Instruction::OrlAIndirReg(r))
                     }
                     (&Register(Reg::A), &Immediate(imm)) if imm >= -128 && imm <= 255 => {
-                        Ok(Instruction::OrlAData(imm as u8))
+                        Ok(Instruction::OrlAData(Data::Number(imm as u8)))
+                    }
+                    (&Register(Reg::A), &ImmediateId(ref id)) => {
+                        Ok(Instruction::OrlAData(Data::Identifier(id.clone())))
                     }
                     (&Direct(addr), &Register(Reg::A)) => Ok(Instruction::OrlDirectA(addr)),
                     (&Direct(addr), &Immediate(imm)) if imm >= -128 && imm <= 255 => {
-                        Ok(Instruction::OrlDirectData(addr, imm as u8))
+                        Ok(Instruction::OrlDirectData(addr, Data::Number(imm as u8)))
                     }
-                    (&Register(Reg::C), &Direct(addr)) => Ok(Instruction::OrlCBit(addr)),
+                    (&Direct(addr), &ImmediateId(ref id)) => {
+                        Ok(Instruction::OrlDirectData(addr, Data::Identifier(id.clone())))
+                    }
+                    (&Register(Reg::C), &DirectBit(addr)) => Ok(Instruction::OrlCBit(addr)),
                     _ => {
                         return Self::invalid_operand(operator, operands[1].clone(), 1);
                     }
@@ -862,8 +931,9 @@ impl Instruction {
                     Direct(dir) => Ok(Instruction::SubbADirect(dir)),
                     IndirectReg(Reg::R(r)) if r < 2 => Ok(Instruction::SubbAIndirReg(r)),
                     Immediate(imm) if imm >= -128 && imm <= 255 => {
-                        Ok(Instruction::SubbAData(imm as u8))
+                        Ok(Instruction::SubbAData(Data::Number(imm as u8)))
                     }
+                    ImmediateId(ref id) => Ok(Instruction::SubbAData(Data::Identifier(id.clone()))),
                     _ => {
                         return Self::invalid_operand(operator, operands[1].clone(), 1);
                     }
@@ -921,11 +991,17 @@ impl Instruction {
                         Ok(Instruction::XrlAIndirReg(r))
                     }
                     (&Register(Reg::A), &Immediate(imm)) if imm >= -128 && imm <= 255 => {
-                        Ok(Instruction::XrlAData(imm as u8))
+                        Ok(Instruction::XrlAData(Data::Number(imm as u8)))
+                    }
+                    (&Register(Reg::A), &ImmediateId(ref id)) => {
+                        Ok(Instruction::XrlAData(Data::Identifier(id.clone())))
                     }
                     (&Direct(addr), &Register(Reg::A)) => Ok(Instruction::XrlDirectA(addr)),
                     (&Direct(addr), &Immediate(imm)) if imm >= -128 && imm <= 255 => {
-                        Ok(Instruction::XrlDirectData(addr, imm as u8))
+                        Ok(Instruction::XrlDirectData(addr, Data::Number(imm as u8)))
+                    }
+                    (&Direct(addr), &ImmediateId(ref id)) => {
+                        Ok(Instruction::XrlDirectData(addr, Data::Identifier(id.clone())))
                     }
                     _ => {
                         return Self::invalid_operand(operator, operands[1].clone(), 1);
@@ -936,48 +1012,63 @@ impl Instruction {
     }
 
     pub fn to_bytes(&self,
-                    labels: &HashMap<String, u16>,
+                    identifiers: &HashMap<String, i32>,
                     cur_addr: u16)
                     -> Result<Vec<u8>, InstructionError> {
         match *self {
             Instruction::Acall(ref addr) => {
-                let addr = addr.to_u16(labels)?;
+                let addr = addr.to_u16(identifiers)?;
                 Ok(vec![((addr >> 3) & 0xE0) as u8 | 0x11, (addr & 0xFF) as u8])
             }
             Instruction::AddAReg(r) => Ok(vec![0x28 | r]),
             Instruction::AddADirect(dir) => Ok(vec![0x25, dir]),
             Instruction::AddAIndirReg(r) => Ok(vec![0x26 | r]),
-            Instruction::AddAData(data) => Ok(vec![0x24, data]),
+            Instruction::AddAData(ref data) => {
+                let data = data.to_u8(identifiers)?;
+                Ok(vec![0x24, data])
+            }
             Instruction::AddcAReg(r) => Ok(vec![0x38 | r]),
             Instruction::AddcADirect(dir) => Ok(vec![0x35, dir]),
             Instruction::AddcAIndirReg(r) => Ok(vec![0x36 | r]),
-            Instruction::AddcAData(data) => Ok(vec![0x34, data]),
+            Instruction::AddcAData(ref data) => {
+                let data = data.to_u8(identifiers)?;
+                Ok(vec![0x34, data])
+            }
             Instruction::Ajmp(ref addr) => {
-                let addr = addr.to_u16(labels)?;
+                let addr = addr.to_u16(identifiers)?;
                 Ok(vec![((addr >> 3) & 0xE0) as u8 | 0x01, (addr & 0xFF) as u8])
             }
             Instruction::AnlAReg(r) => Ok(vec![0x58 | r]),
             Instruction::AnlADirect(dir) => Ok(vec![0x55, dir]),
             Instruction::AnlAIndirReg(r) => Ok(vec![0x56 | r]),
-            Instruction::AnlAData(data) => Ok(vec![0x54, data]),
+            Instruction::AnlAData(ref data) => {
+                let data = data.to_u8(identifiers)?;
+                Ok(vec![0x54, data])
+            }
             Instruction::AnlDirectA(dir) => Ok(vec![0x52, dir]),
-            Instruction::AnlDirectData(dir, data) => Ok(vec![0x53, dir, data]),
+            Instruction::AnlDirectData(dir, ref data) => {
+                let data = data.to_u8(identifiers)?;
+                Ok(vec![0x53, dir, data])
+            }
             Instruction::AnlCBit(bit) => Ok(vec![0x82, bit]),
             Instruction::AnlCNegBit(bit) => Ok(vec![0xB0, bit]),
             Instruction::CjneADirRel(dir, ref addr) => {
-                let addr = addr.to_u16(labels)?.wrapping_sub(cur_addr + 3);
+                let addr = addr.to_u16(identifiers)?.wrapping_sub(cur_addr + 3);
                 Ok(vec![0xB5, dir, addr as u8])
             }
-            Instruction::CjneADataRel(data, ref addr) => {
-                let addr = addr.to_u16(labels)?.wrapping_sub(cur_addr + 3);
+            Instruction::CjneADataRel(ref data, ref addr) => {
+                let data = data.to_u8(identifiers)?;
+                let addr = addr.to_u16(identifiers)?.wrapping_sub(cur_addr + 3);
                 Ok(vec![0xB4, data, addr as u8])
             }
-            Instruction::CJneRegDataRel(r, data, ref addr) => {
-                let addr = addr.to_u16(labels)?.wrapping_sub(cur_addr + 3);
+            Instruction::CjneRegDataRel(r, ref data, ref addr) => {
+                let data = data.to_u8(identifiers)?;
+                let addr = addr.to_u16(identifiers)?.wrapping_sub(cur_addr + 3);
                 Ok(vec![0xB8 | r, data, addr as u8])
             }
-            Instruction::CjneIndirRegDataRel(r, data, ref addr) => {
-                let addr = addr.to_u16(labels)?.wrapping_sub(cur_addr + 3);
+            Instruction::CjneIndirRegDataRel(r, ref data, ref addr) => {
+                let data = data.to_u8(identifiers)?;
+                let addr = addr.to_u16(identifiers)?.wrapping_sub(cur_addr + 3);
                 Ok(vec![0xB6 | r, data, addr as u8])
             }
             Instruction::ClrA => Ok(vec![0xE4]),
@@ -993,11 +1084,11 @@ impl Instruction {
             Instruction::DecIndirReg(r) => Ok(vec![0x16 | r]),
             Instruction::DivAB => Ok(vec![0x84]),
             Instruction::DjnzRegRel(r, ref addr) => {
-                let addr = addr.to_u16(labels)?.wrapping_sub(cur_addr + 2);
+                let addr = addr.to_u16(identifiers)?.wrapping_sub(cur_addr + 2);
                 Ok(vec![0xD8 | r, addr as u8])
             }
             Instruction::DjnzDirectRel(dir, ref addr) => {
-                let addr = addr.to_u16(labels)?.wrapping_sub(cur_addr + 3);
+                let addr = addr.to_u16(identifiers)?.wrapping_sub(cur_addr + 3);
                 Ok(vec![0xD5, dir, addr as u8])
             }
             Instruction::IncA => Ok(vec![0x04]),
@@ -1006,61 +1097,73 @@ impl Instruction {
             Instruction::IncIndirReg(r) => Ok(vec![0x06 | r]),
             Instruction::IncDptr => Ok(vec![0xA3]),
             Instruction::JbBitRel(bit, ref addr) => {
-                let addr = addr.to_u16(labels)?.wrapping_sub(cur_addr + 3);
+                let addr = addr.to_u16(identifiers)?.wrapping_sub(cur_addr + 3);
                 Ok(vec![0x20, bit, addr as u8])
             }
             Instruction::JbcBitRel(bit, ref addr) => {
-                let addr = addr.to_u16(labels)?.wrapping_sub(cur_addr + 3);
+                let addr = addr.to_u16(identifiers)?.wrapping_sub(cur_addr + 3);
                 Ok(vec![0x10, bit, addr as u8])
             }
             Instruction::JcRel(ref addr) => {
-                let addr = addr.to_u16(labels)?.wrapping_sub(cur_addr + 2);
+                let addr = addr.to_u16(identifiers)?.wrapping_sub(cur_addr + 2);
                 Ok(vec![0x40, addr as u8])
             }
             Instruction::JmpIndirAPlusDptr => Ok(vec![0x73]),
             Instruction::JnbBitRel(bit, ref addr) => {
-                let addr = addr.to_u16(labels)?.wrapping_sub(cur_addr + 3);
+                let addr = addr.to_u16(identifiers)?.wrapping_sub(cur_addr + 3);
                 Ok(vec![0x30, bit, addr as u8])
             }
             Instruction::JncRel(ref addr) => {
-                let addr = addr.to_u16(labels)?.wrapping_sub(cur_addr + 2);
+                let addr = addr.to_u16(identifiers)?.wrapping_sub(cur_addr + 2);
                 Ok(vec![0x50, addr as u8])
             }
             Instruction::JnzRel(ref addr) => {
-                let addr = addr.to_u16(labels)?.wrapping_sub(cur_addr + 2);
+                let addr = addr.to_u16(identifiers)?.wrapping_sub(cur_addr + 2);
                 Ok(vec![0x70, addr as u8])
             }
             Instruction::JzRel(ref addr) => {
-                let addr = addr.to_u16(labels)?.wrapping_sub(cur_addr + 2);
+                let addr = addr.to_u16(identifiers)?.wrapping_sub(cur_addr + 2);
                 Ok(vec![0x60, addr as u8])
             }
             Instruction::Lcall(ref addr) => {
-                let addr = addr.to_u16(labels)?;
+                let addr = addr.to_u16(identifiers)?;
                 Ok(vec![0x12, (addr / 256) as u8, (addr % 256) as u8])
             }
             Instruction::Ljmp(ref addr) => {
-                let addr = addr.to_u16(labels)?;
+                let addr = addr.to_u16(identifiers)?;
                 Ok(vec![0x02, (addr / 256) as u8, (addr % 256) as u8])
             }
             Instruction::MovAReg(r) => Ok(vec![0xE8 | r]),
             Instruction::MovADirect(dir) => Ok(vec![0xE5, dir]),
             Instruction::MovAIndirReg(r) => Ok(vec![0xE6 | r]),
-            Instruction::MovAData(data) => Ok(vec![0x74, data]),
+            Instruction::MovAData(ref data) => {
+                let data = data.to_u8(identifiers)?;
+                Ok(vec![0x74, data])
+            }
             Instruction::MovRegA(r) => Ok(vec![0xF8 | r]),
             Instruction::MovRegDir(r, dir) => Ok(vec![0xC8 | r, dir]),
-            Instruction::MovRegData(r, data) => Ok(vec![0x78 | r, data]),
+            Instruction::MovRegData(r, ref data) => {
+                let data = data.to_u8(identifiers)?;
+                Ok(vec![0x78 | r, data])
+            }
             Instruction::MovDirectA(dir) => Ok(vec![0xF5, dir]),
             Instruction::MovDirectReg(dir, r) => Ok(vec![0x88 | r, dir]),
             Instruction::MovDirectDirect(dir, dir2) => Ok(vec![0x85, dir2, dir]),
             Instruction::MovDirectIndirReg(dir, r) => Ok(vec![0x86 | r, dir]),
-            Instruction::MovDirectData(dir, data) => Ok(vec![0x75, dir, data]),
+            Instruction::MovDirectData(dir, ref data) => {
+                let data = data.to_u8(identifiers)?;
+                Ok(vec![0x75, dir, data])
+            }
             Instruction::MovIndirRegA(r) => Ok(vec![0xF6 | r]),
             Instruction::MovIndirRegDirect(r, dir) => Ok(vec![0xA6 | r, dir]),
-            Instruction::MovIndirRegData(r, data) => Ok(vec![0x76 | r, data]),
+            Instruction::MovIndirRegData(r, ref data) => {
+                let data = data.to_u8(identifiers)?;
+                Ok(vec![0x76 | r, data])
+            }
             Instruction::MovCBit(bit) => Ok(vec![0xA2, bit]),
             Instruction::MovBitC(bit) => Ok(vec![0x92, bit]),
             Instruction::MovDptrData(ref addr) => {
-                let addr = addr.to_u16(labels)?;
+                let addr = addr.to_u16(identifiers)?;
                 Ok(vec![0x90, (addr / 256) as u8, (addr % 256) as u8])
             }
             Instruction::MovcAIndirAPlusDptr => Ok(vec![0x93]),
@@ -1074,9 +1177,15 @@ impl Instruction {
             Instruction::OrlAReg(r) => Ok(vec![0x48 | r]),
             Instruction::OrlADirect(dir) => Ok(vec![0x45, dir]),
             Instruction::OrlAIndirReg(r) => Ok(vec![0x46 | r]),
-            Instruction::OrlAData(data) => Ok(vec![0x44, data]),
+            Instruction::OrlAData(ref data) => {
+                let data = data.to_u8(identifiers)?;
+                Ok(vec![0x44, data])
+            }
             Instruction::OrlDirectA(dir) => Ok(vec![0x42, dir]),
-            Instruction::OrlDirectData(dir, data) => Ok(vec![0x43, dir, data]),
+            Instruction::OrlDirectData(dir, ref data) => {
+                let data = data.to_u8(identifiers)?;
+                Ok(vec![0x43, dir, data])
+            }
             Instruction::OrlCBit(bit) => Ok(vec![0x72, bit]),
             Instruction::OrlCNegBit(bit) => Ok(vec![0xA0, bit]),
             Instruction::PopDirect(dir) => Ok(vec![0xD0, dir]),
@@ -1090,13 +1199,16 @@ impl Instruction {
             Instruction::SetbC => Ok(vec![0xD3]),
             Instruction::SetbBit(bit) => Ok(vec![0xD2, bit]),
             Instruction::Sjmp(ref addr) => {
-                let addr = addr.to_u16(labels)?.wrapping_sub(cur_addr + 2);
+                let addr = addr.to_u16(identifiers)?.wrapping_sub(cur_addr + 2);
                 Ok(vec![0x80, addr as u8])
             }
             Instruction::SubbAReg(r) => Ok(vec![0x98 | r]),
             Instruction::SubbADirect(dir) => Ok(vec![0x95, dir]),
             Instruction::SubbAIndirReg(r) => Ok(vec![0x96 | r]),
-            Instruction::SubbAData(data) => Ok(vec![0x94, data]),
+            Instruction::SubbAData(ref data) => {
+                let data = data.to_u8(identifiers)?;
+                Ok(vec![0x94, data])
+            }
             Instruction::SwapA => Ok(vec![0xC4]),
             Instruction::XchAReg(r) => Ok(vec![0xC8 | r]),
             Instruction::XchADirect(dir) => Ok(vec![0xC5, dir]),
@@ -1105,9 +1217,15 @@ impl Instruction {
             Instruction::XrlAReg(r) => Ok(vec![0x68 | r]),
             Instruction::XrlADirect(dir) => Ok(vec![0x65, dir]),
             Instruction::XrlAIndirReg(r) => Ok(vec![0x66 | r]),
-            Instruction::XrlAData(data) => Ok(vec![0x64, data]),
+            Instruction::XrlAData(ref data) => {
+                let data = data.to_u8(identifiers)?;
+                Ok(vec![0x64, data])
+            }
             Instruction::XrlDirectA(dir) => Ok(vec![0x62, dir]),
-            Instruction::XrlDirectData(dir, data) => Ok(vec![0x63, dir, data]),
+            Instruction::XrlDirectData(dir, ref data) => {
+                let data = data.to_u8(identifiers)?;
+                Ok(vec![0x63, dir, data])
+            }
             Instruction::Bytes(ref b) => Ok(b.clone()),
         }
     }

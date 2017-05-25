@@ -4,15 +4,13 @@ use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct Mir {
-    labels: HashMap<String, u16>,
-    equ_defs: HashMap<String, i32>,
+    identifiers: HashMap<String, i32>,
     instructions: Vec<(u16, Instruction)>,
 }
 
 impl Mir {
     pub fn from_program(program: Program) -> Result<Self, InstructionError> {
-        let mut labels = HashMap::new();
-        let mut equ_defs = HashMap::new();
+        let mut identifiers = HashMap::new();
         let mut instructions = Vec::new();
         let mut current_address = 0;
         for line in program.lines.into_iter() {
@@ -22,13 +20,17 @@ impl Mir {
                     continue;
                 }
                 Line::EquDef { id, value } => {
-                    equ_defs.insert(id, value);
+                    if let Some(_) = identifiers.insert(id.clone(), value) {
+                        return Err(InstructionError::DuplicateIdentifier(id));
+                    }
                     continue;
                 }
                 Line::ProgramLine { label, body } => (label, body),
             };
             if let Some(label) = label {
-                labels.insert(label.0, current_address);
+                if let Some(_) = identifiers.insert(label.0.clone(), current_address as i32) {
+                    return Err(InstructionError::DuplicateIdentifier(label.0));
+                }
             }
             if let Some(body) = body {
                 match body {
@@ -51,9 +53,8 @@ impl Mir {
             }
         }
         Ok(Mir {
-               labels: labels,
-               equ_defs: equ_defs,
-               instructions: instructions,
+               identifiers,
+               instructions,
            })
     }
 
@@ -74,7 +75,7 @@ impl Mir {
         let mut result = String::new();
         for &(addr, ref instruction) in self.instructions.iter() {
             let bytes = instruction
-                .to_bytes(&self.labels, addr)
+                .to_bytes(&self.identifiers, addr)
                 .unwrap_or_else(|e| panic!("ERROR: {:?}", e));
             result.push_str(&Self::intel_hex(addr, bytes));
         }
