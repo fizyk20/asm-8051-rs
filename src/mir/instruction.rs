@@ -476,7 +476,7 @@ impl Instruction {
                 match operands[0] {
                     Register(Reg::A) => Ok(Instruction::ClrA),
                     Register(Reg::C) => Ok(Instruction::ClrC),
-                    Direct(addr) => Ok(Instruction::ClrBit(addr)),
+                    DirectBit(addr) => Ok(Instruction::ClrBit(addr)),
                     _ => {
                         return Self::invalid_operand(operator, operands[0].clone(), 0);
                     }
@@ -487,7 +487,7 @@ impl Instruction {
                 match operands[0] {
                     Register(Reg::A) => Ok(Instruction::CplA),
                     Register(Reg::C) => Ok(Instruction::CplC),
-                    Direct(addr) => Ok(Instruction::CplBit(addr)),
+                    DirectBit(addr) => Ok(Instruction::CplBit(addr)),
                     _ => {
                         return Self::invalid_operand(operator, operands[0].clone(), 0);
                     }
@@ -567,7 +567,7 @@ impl Instruction {
                     }
                 };
                 match operands[0] {
-                    Direct(addr) => Ok(Instruction::JbBitRel(addr, rel)),
+                    DirectBit(addr) => Ok(Instruction::JbBitRel(addr, rel)),
                     _ => {
                         return Self::invalid_operand(operator, operands[0].clone(), 0);
                     }
@@ -582,7 +582,7 @@ impl Instruction {
                     }
                 };
                 match operands[0] {
-                    Direct(addr) => Ok(Instruction::JbcBitRel(addr, rel)),
+                    DirectBit(addr) => Ok(Instruction::JbcBitRel(addr, rel)),
                     _ => {
                         return Self::invalid_operand(operator, operands[0].clone(), 0);
                     }
@@ -615,7 +615,7 @@ impl Instruction {
                     }
                 };
                 match operands[0] {
-                    Direct(addr) => Ok(Instruction::JnbBitRel(addr, rel)),
+                    DirectBit(addr) => Ok(Instruction::JnbBitRel(addr, rel)),
                     _ => {
                         return Self::invalid_operand(operator, operands[0].clone(), 0);
                     }
@@ -906,7 +906,7 @@ impl Instruction {
                 Self::expect_operands(operator, &operands, 1)?;
                 match operands[0] {
                     Register(Reg::C) => Ok(Instruction::SetbC),
-                    Direct(addr) => Ok(Instruction::SetbBit(addr)),
+                    DirectBit(addr) => Ok(Instruction::SetbBit(addr)),
                     _ => {
                         return Self::invalid_operand(operator, operands[0].clone(), 0);
                     }
