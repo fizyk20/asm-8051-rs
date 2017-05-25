@@ -1,14 +1,31 @@
 use super::keywords::{DirectLocation, Keyword, Operator};
+use std::cmp;
 use std::error;
 use std::fmt::Display;
 use std::io::{self, Write};
 use std::mem;
 use std::str;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Position {
     row: usize,
     column: usize,
+}
+
+impl PartialOrd for Position {
+    fn partial_cmp(&self, other: &Position) -> Option<cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Position {
+    fn cmp(&self, other: &Position) -> cmp::Ordering {
+        if self.row == other.row {
+            self.column.cmp(&other.column)
+        } else {
+            self.row.cmp(&other.row)
+        }
+    }
 }
 
 /// An enumeration listing possible tokens

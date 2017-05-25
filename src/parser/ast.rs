@@ -73,16 +73,55 @@ pub enum ParseError {
     ExpectedPlus(lexer::Position),
     ExpectedLeftBracket(lexer::Position),
     ExpectedRightBracket(lexer::Position),
-    InvalidLineBody(lexer::Position),
     InvalidMnemonic(String, lexer::Position),
-    InvalidOperand(lexer::Token),
     InvalidRegister(lexer::Token),
-    InvalidDirectAddr(u8),
-    InvalidBitNumber(u8),
-    InvalidNumber(String),
-    InvalidByte(i32),
-    InvalidWord(i32),
-    GeneralError,
+    InvalidDirectAddr(u8, lexer::Position),
+    InvalidBitNumber(u8, lexer::Position),
+    InvalidNumber(String, lexer::Position),
+    InvalidByte(i32, lexer::Position),
+    InvalidWord(i32, lexer::Position),
+    GeneralError(lexer::Position),
+}
+
+impl ParseError {
+    fn position(&self) -> lexer::Position {
+        match *self {
+            ParseError::UnexpectedEof(ref t) => t.get_position(),
+            ParseError::ExpectedNewline(p) => p,
+            ParseError::ExpectedIdentifier(p) => p,
+            ParseError::ExpectedOperator(p) => p,
+            ParseError::ExpectedDirectLocation(p) => p,
+            ParseError::ExpectedKeyword(_, p) => p,
+            ParseError::ExpectedNumber(p) => p,
+            ParseError::ExpectedColon(p) => p,
+            ParseError::ExpectedComma(p) => p,
+            ParseError::ExpectedDot(p) => p,
+            ParseError::ExpectedAt(p) => p,
+            ParseError::ExpectedPlus(p) => p,
+            ParseError::ExpectedLeftBracket(p) => p,
+            ParseError::ExpectedRightBracket(p) => p,
+            ParseError::InvalidMnemonic(_, p) => p,
+            ParseError::InvalidRegister(ref t) => t.get_position(),
+            ParseError::InvalidDirectAddr(_, p) => p,
+            ParseError::InvalidBitNumber(_, p) => p,
+            ParseError::InvalidNumber(_, p) => p,
+            ParseError::InvalidByte(_, p) => p,
+            ParseError::InvalidWord(_, p) => p,
+            ParseError::GeneralError(p) => p,
+        }
+    }
+}
+
+fn later(err: Option<ParseError>, err2: ParseError) -> Option<ParseError> {
+    if let Some(err) = err {
+        if err2.position() > err.position() {
+            Some(err2)
+        } else {
+            Some(err)
+        }
+    } else {
+        Some(err2)
+    }
 }
 
 pub type Result<T> = ::std::result::Result<T, ParseError>;
@@ -116,7 +155,8 @@ impl<'a> ParserState<'a> {
         if self.position < self.tokens.len() {
             Ok(self.tokens[self.position].clone())
         } else {
-            Err(ParseError::UnexpectedEof(self.tokens[self.tokens.len() - 1].clone()))
+            let last_token = &self.tokens[self.tokens.len() - 1];
+            Err(ParseError::UnexpectedEof(last_token.clone()))
         }
     }
 
@@ -258,15 +298,20 @@ impl<'a> ParserState<'a> {
 
     fn parse_line(self) -> Result<ParseResult<'a, Line>> {
         let mut cur_state = self;
+        let mut latest_error = None;
 
         let result = cur_state.clone().parse_org_line();
         if result.is_ok() {
             return result;
+        } else {
+            latest_error = later(latest_error, result.err().unwrap());
         }
 
         let result = cur_state.clone().parse_equ_def();
         if result.is_ok() {
             return result;
+        } else {
+            latest_error = later(latest_error, result.err().unwrap());
         }
 
         let result_label = cur_state.clone().parse_label();
@@ -275,6 +320,7 @@ impl<'a> ParserState<'a> {
             cur_state = parse_result_label.state;
             Some(parse_result_label.result)
         } else {
+            latest_error = later(latest_error, result_label.err().unwrap());
             None
         };
 
@@ -283,12 +329,19 @@ impl<'a> ParserState<'a> {
             cur_state = parse_result_lbody.state;
             Some(parse_result_lbody.result)
         } else {
+            latest_error = later(latest_error, result_lbody.err().unwrap());
             None
         };
 
-        let newline_result = cur_state.expect_newline()?;
+        let newline_result = cur_state.clone().expect_newline();
+        if let Err(e) = newline_result {
+            latest_error = later(latest_error, e);
+            return Err(latest_error.unwrap());
+        } else {
+            cur_state = newline_result.unwrap();
+        }
         Ok(ParseResult {
-               state: newline_result,
+               state: cur_state,
                result: Line::ProgramLine {
                    label: label,
                    body: lbody,
@@ -353,17 +406,21 @@ impl<'a> ParserState<'a> {
 
     fn parse_line_body(self) -> Result<ParseResult<'a, LineBody>> {
         let result = self.clone().parse_code_line();
+        let mut latest_error = None;
         if result.is_ok() {
             return result;
+        } else {
+            latest_error = later(latest_error, result.err().unwrap());
         }
 
         let result = self.clone().parse_value_def();
         if result.is_ok() {
             return result;
+        } else {
+            latest_error = later(latest_error, result.err().unwrap());
         }
 
-        let cur_tok = self.current_token()?;
-        Err(ParseError::InvalidLineBody(cur_tok.get_position()))
+        Err(latest_error.unwrap())
     }
 
     fn parse_code_line(self) -> Result<ParseResult<'a, LineBody>> {
@@ -453,18 +510,23 @@ impl<'a> ParserState<'a> {
                       });
         }
 
-        Err(ParseError::InvalidNumber(num_string))
+        Err(ParseError::InvalidNumber(num_string, cur_tok.get_position()))
     }
 
     fn parse_operand(self) -> Result<ParseResult<'a, Operand>> {
+        let mut latest_error = None;
         let res_indirect_sum = self.clone().parse_indirect_sum();
         if res_indirect_sum.is_ok() {
             return res_indirect_sum;
+        } else {
+            latest_error = later(latest_error, res_indirect_sum.err().unwrap());
         }
 
         let res_indirect = self.clone().parse_indirect();
         if res_indirect.is_ok() {
             return res_indirect;
+        } else {
+            latest_error = later(latest_error, res_indirect.err().unwrap());
         }
 
         let res_register = self.clone().parse_register();
@@ -473,20 +535,25 @@ impl<'a> ParserState<'a> {
                           state: result.state,
                           result: Operand::Register(result.result),
                       });
+        } else {
+            latest_error = later(latest_error, res_register.err().unwrap());
         }
 
         let res_direct = self.clone().parse_direct();
         if res_direct.is_ok() {
             return res_direct;
+        } else {
+            latest_error = later(latest_error, res_direct.err().unwrap());
         }
 
         let res_immediate = self.clone().parse_immediate();
         if res_immediate.is_ok() {
             return res_immediate;
+        } else {
+            latest_error = later(latest_error, res_immediate.err().unwrap());
         }
 
-        let cur_tok = self.current_token()?;
-        Err(ParseError::InvalidOperand(cur_tok))
+        Err(latest_error.unwrap())
     }
 
     fn parse_indirect_sum(self) -> Result<ParseResult<'a, Operand>> {
@@ -545,7 +612,7 @@ impl<'a> ParserState<'a> {
                       });
         }
 
-        Err(ParseError::GeneralError)
+        Err(ParseError::GeneralError(cur_tok.get_position()))
     }
 
     fn parse_register(self) -> Result<ParseResult<'a, Register>> {
@@ -565,34 +632,47 @@ impl<'a> ParserState<'a> {
     }
 
     fn parse_direct(self) -> Result<ParseResult<'a, Operand>> {
+        let mut latest_error = None;
         let ParseResult {
             state: cur_state,
             result: direct,
-        } = if let Ok(result) = self.clone().parse_direct_number() {
-            result
-        } else {
-            self.expect_direct_id()?
+        } = {
+            let result = self.clone().parse_direct_number();
+            if result.is_ok() {
+                result.unwrap()
+            } else {
+                latest_error = later(latest_error, result.err().unwrap());
+                let result = self.expect_direct_id();
+                if result.is_ok() {
+                    result.unwrap()
+                } else {
+                    latest_error = later(latest_error, result.err().unwrap());
+                    return Err(latest_error.unwrap());
+                }
+            }
         };
 
-        if let Ok(ParseResult {
-                      state: cur_state,
-                      result: bit_num,
-                  }) = cur_state.clone().parse_bit() {
-            let bit_addr = Self::direct_bit(direct, bit_num)?;
-            Ok(ParseResult {
-                   state: cur_state,
-                   result: bit_addr,
-               })
-        } else {
-            Ok(ParseResult {
-                   state: cur_state,
-                   result: direct,
-               })
+        if let Ok(cur_tok) = cur_state.current_token() {
+            if let Ok(ParseResult {
+                          state: cur_state,
+                          result: bit_num,
+                      }) = cur_state.clone().parse_bit() {
+                let bit_addr = Self::direct_bit(direct, bit_num, cur_tok.get_position())?;
+                return Ok(ParseResult {
+                              state: cur_state,
+                              result: bit_addr,
+                          });
+            }
         }
+        Ok(ParseResult {
+               state: cur_state,
+               result: direct,
+           })
     }
 
     fn parse_direct_number(self) -> Result<ParseResult<'a, Operand>> {
         let cur_state = self.expect_left_bracket()?;
+        let cur_tok = cur_state.current_token()?;
         let ParseResult {
             state: cur_state,
             result: number,
@@ -600,19 +680,20 @@ impl<'a> ParserState<'a> {
         let cur_state = cur_state.expect_right_bracket()?;
         Ok(ParseResult {
                state: cur_state,
-               result: Operand::Direct(Self::to_byte(number)?),
+               result: Operand::Direct(Self::to_byte(number, cur_tok.get_position())?),
            })
     }
 
     fn parse_bit(self) -> Result<ParseResult<'a, u8>> {
         let cur_state = self.expect_dot()?;
+        let cur_tok = cur_state.current_token()?;
         let ParseResult {
             state: cur_state,
             result: number,
         } = cur_state.parse_number()?;
         Ok(ParseResult {
                state: cur_state,
-               result: Self::to_byte(number)?,
+               result: Self::to_byte(number, cur_tok.get_position())?,
            })
     }
 
@@ -681,21 +762,23 @@ impl<'a> ParserState<'a> {
 
     fn parse_words(self) -> Result<ParseResult<'a, Vec<Value>>> {
         let mut values = Vec::new();
+        let cur_tok = self.current_token()?;
 
         let ParseResult {
             state: mut cur_state,
             result: first_number,
         } = self.parse_number()?;
 
-        values.push(Value::Word(Self::to_word(first_number)?));
+        values.push(Value::Word(Self::to_word(first_number, cur_tok.get_position())?));
 
         while let Ok(new_state) = cur_state.clone().expect_comma() {
+            let cur_tok = cur_state.current_token()?;
             let ParseResult {
                 state: new_state2,
                 result: next_value,
             } = new_state.parse_number()?;
             cur_state = new_state2;
-            values.push(Value::Word(Self::to_word(next_value)?));
+            values.push(Value::Word(Self::to_word(next_value, cur_tok.get_position())?));
         }
 
         Ok(ParseResult {
@@ -720,29 +803,29 @@ impl<'a> ParserState<'a> {
 
         Ok(ParseResult {
                state: cur_state,
-               result: Value::Byte(Self::to_byte(byte)?),
+               result: Value::Byte(Self::to_byte(byte, cur_tok.get_position())?),
            })
     }
 
-    fn to_byte(byte: i32) -> Result<u8> {
+    fn to_byte(byte: i32, p: lexer::Position) -> Result<u8> {
         if byte >= 0 && byte <= 255 {
             Ok(byte as u8)
         } else {
-            Err(ParseError::InvalidByte(byte))
+            Err(ParseError::InvalidByte(byte, p))
         }
     }
 
-    fn to_word(word: i32) -> Result<u16> {
+    fn to_word(word: i32, p: lexer::Position) -> Result<u16> {
         if word >= 0 && word <= 65535 {
             Ok(word as u16)
         } else {
-            Err(ParseError::InvalidWord(word))
+            Err(ParseError::InvalidWord(word, p))
         }
     }
 
-    fn direct_bit(direct: Operand, bit_num: u8) -> Result<Operand> {
+    fn direct_bit(direct: Operand, bit_num: u8, p: lexer::Position) -> Result<Operand> {
         if bit_num > 7 {
-            return Err(ParseError::InvalidBitNumber(bit_num));
+            return Err(ParseError::InvalidBitNumber(bit_num, p));
         }
         if let Operand::Direct(addr) = direct {
             if addr >= 0x20 && addr < 0x30 {
@@ -750,10 +833,10 @@ impl<'a> ParserState<'a> {
             } else if addr >= 0x80 {
                 Ok(Operand::DirectBit(addr + bit_num))
             } else {
-                Err(ParseError::InvalidDirectAddr(addr))
+                Err(ParseError::InvalidDirectAddr(addr, p))
             }
         } else {
-            Err(ParseError::GeneralError)
+            Err(ParseError::GeneralError(p))
         }
     }
 }
