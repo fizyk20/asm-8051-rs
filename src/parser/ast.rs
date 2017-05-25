@@ -33,6 +33,7 @@ pub struct Label(pub String);
 pub enum Operand {
     Register(Register),
     Direct(u8),
+    DirectBit(u8),
     IndirectReg(Register),
     IndirectSum(Register, Register),
     Immediate(i32),
@@ -62,19 +63,22 @@ pub enum ParseError {
     ExpectedNewline(lexer::Position),
     ExpectedIdentifier(lexer::Position),
     ExpectedOperator(lexer::Position),
+    ExpectedDirectLocation(lexer::Position),
     ExpectedKeyword(Keyword, lexer::Position),
     ExpectedNumber(lexer::Position),
     ExpectedColon(lexer::Position),
     ExpectedComma(lexer::Position),
     ExpectedDot(lexer::Position),
     ExpectedAt(lexer::Position),
-    ExpectedHash(lexer::Position),
     ExpectedPlus(lexer::Position),
+    ExpectedLeftBracket(lexer::Position),
+    ExpectedRightBracket(lexer::Position),
     InvalidLineBody(lexer::Position),
     InvalidMnemonic(String, lexer::Position),
     InvalidOperand(lexer::Token),
     InvalidRegister(lexer::Token),
     InvalidDirectAddr(u8),
+    InvalidBitNumber(u8),
     InvalidNumber(String),
     InvalidByte(i32),
     InvalidWord(i32),
@@ -154,6 +158,18 @@ impl<'a> ParserState<'a> {
         }
     }
 
+    fn expect_direct_id(self) -> Result<ParseResult<'a, Operand>> {
+        let cur_tok = self.current_token()?;
+        if let lexer::Token::DirectLocation(dir, _) = cur_tok {
+            Ok(ParseResult {
+                   state: self.advanced(),
+                   result: Operand::Direct(dir.get_addr()),
+               })
+        } else {
+            Err(ParseError::ExpectedDirectLocation(cur_tok.get_position()))
+        }
+    }
+
     fn expect_newline(self) -> Result<ParserState<'a>> {
         let cur_tok = self.current_token();
         match cur_tok {
@@ -196,21 +212,30 @@ impl<'a> ParserState<'a> {
         }
     }
 
-    fn expect_hash(self) -> Result<ParserState<'a>> {
-        let cur_tok = self.current_token()?;
-        if cur_tok.is_hash() {
-            Ok(self.advanced())
-        } else {
-            Err(ParseError::ExpectedHash(cur_tok.get_position()))
-        }
-    }
-
     fn expect_plus(self) -> Result<ParserState<'a>> {
         let cur_tok = self.current_token()?;
         if cur_tok.is_plus() {
             Ok(self.advanced())
         } else {
             Err(ParseError::ExpectedPlus(cur_tok.get_position()))
+        }
+    }
+
+    fn expect_left_bracket(self) -> Result<ParserState<'a>> {
+        let cur_tok = self.current_token()?;
+        if cur_tok.is_left_bracket() {
+            Ok(self.advanced())
+        } else {
+            Err(ParseError::ExpectedLeftBracket(cur_tok.get_position()))
+        }
+    }
+
+    fn expect_right_bracket(self) -> Result<ParserState<'a>> {
+        let cur_tok = self.current_token()?;
+        if cur_tok.is_right_bracket() {
+            Ok(self.advanced())
+        } else {
+            Err(ParseError::ExpectedRightBracket(cur_tok.get_position()))
         }
     }
 
@@ -500,13 +525,11 @@ impl<'a> ParserState<'a> {
     }
 
     fn parse_immediate(self) -> Result<ParseResult<'a, Operand>> {
-        let cur_state = self.expect_hash()?;
-
-        let cur_tok = cur_state.current_token()?;
+        let cur_tok = self.current_token()?;
 
         if cur_tok.is_identifier() {
             return Ok(ParseResult {
-                          state: cur_state.advanced(),
+                          state: self.advanced(),
                           result: Operand::ImmediateId(cur_tok.get_string().unwrap()),
                       });
         }
@@ -515,7 +538,7 @@ impl<'a> ParserState<'a> {
             let ParseResult {
                 state: cur_state,
                 result: number,
-            } = cur_state.parse_number()?;
+            } = self.parse_number()?;
             return Ok(ParseResult {
                           state: cur_state,
                           result: Operand::Immediate(number),
@@ -542,30 +565,42 @@ impl<'a> ParserState<'a> {
     }
 
     fn parse_direct(self) -> Result<ParseResult<'a, Operand>> {
-        let cur_state = self;
-        let cur_tok = cur_state.current_token()?;
-        let (mut cur_state, mut address) = if let lexer::Token::DirectLocation(dir, _) = cur_tok {
-            (cur_state.advanced(), dir.get_addr())
-        } else if cur_tok.is_number() {
-            let ParseResult {
-                state: cur_state,
-                result: number,
-            } = cur_state.parse_number()?;
-            (cur_state, Self::to_byte(number)?)
+        let ParseResult {
+            state: cur_state,
+            result: direct,
+        } = if let Ok(result) = self.clone().parse_direct_number() {
+            result
         } else {
-            return Err(ParseError::ExpectedIdentifier(cur_tok.get_position()));
+            self.expect_direct_id()?
         };
 
         if let Ok(ParseResult {
-                      state: new_state,
+                      state: cur_state,
                       result: bit_num,
                   }) = cur_state.clone().parse_bit() {
-            address = Self::direct_bit(address, bit_num)?;
-            cur_state = new_state;
+            let bit_addr = Self::direct_bit(direct, bit_num)?;
+            Ok(ParseResult {
+                   state: cur_state,
+                   result: bit_addr,
+               })
+        } else {
+            Ok(ParseResult {
+                   state: cur_state,
+                   result: direct,
+               })
         }
+    }
+
+    fn parse_direct_number(self) -> Result<ParseResult<'a, Operand>> {
+        let cur_state = self.expect_left_bracket()?;
+        let ParseResult {
+            state: cur_state,
+            result: number,
+        } = cur_state.parse_number()?;
+        let cur_state = cur_state.expect_right_bracket()?;
         Ok(ParseResult {
                state: cur_state,
-               result: Operand::Direct(address),
+               result: Operand::Direct(Self::to_byte(number)?),
            })
     }
 
@@ -705,14 +740,20 @@ impl<'a> ParserState<'a> {
         }
     }
 
-    fn direct_bit(addr: u8, bit_num: u8) -> Result<u8> {
-        assert!(bit_num < 8);
-        if addr >= 0x20 && addr < 0x30 {
-            Ok((addr - 0x20) * 8 + bit_num)
-        } else if addr >= 0x80 {
-            Ok(addr + bit_num)
+    fn direct_bit(direct: Operand, bit_num: u8) -> Result<Operand> {
+        if bit_num > 7 {
+            return Err(ParseError::InvalidBitNumber(bit_num));
+        }
+        if let Operand::Direct(addr) = direct {
+            if addr >= 0x20 && addr < 0x30 {
+                Ok(Operand::DirectBit((addr - 0x20) * 8 + bit_num))
+            } else if addr >= 0x80 {
+                Ok(Operand::DirectBit(addr + bit_num))
+            } else {
+                Err(ParseError::InvalidDirectAddr(addr))
+            }
         } else {
-            Err(ParseError::InvalidDirectAddr(addr))
+            Err(ParseError::GeneralError)
         }
     }
 }

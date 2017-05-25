@@ -24,9 +24,10 @@ pub enum Token {
     Comma(Position),
     Dot(Position),
     At(Position),
-    Hash(Position),
     Plus(Position),
     Newline(Position),
+    LeftBracket(Position),
+    RightBracket(Position),
 }
 
 impl Token {
@@ -72,16 +73,23 @@ impl Token {
         }
     }
 
-    pub fn is_hash(&self) -> bool {
+    pub fn is_plus(&self) -> bool {
         match *self {
-            Token::Hash(_) => true,
+            Token::Plus(_) => true,
             _ => false,
         }
     }
 
-    pub fn is_plus(&self) -> bool {
+    pub fn is_left_bracket(&self) -> bool {
         match *self {
-            Token::Plus(_) => true,
+            Token::LeftBracket(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_right_bracket(&self) -> bool {
+        match *self {
+            Token::RightBracket(_) => true,
             _ => false,
         }
     }
@@ -105,9 +113,10 @@ impl Token {
             Token::Comma(p) => p,
             Token::Dot(p) => p,
             Token::At(p) => p,
-            Token::Hash(p) => p,
             Token::Plus(p) => p,
             Token::Newline(p) => p,
+            Token::LeftBracket(p) => p,
+            Token::RightBracket(p) => p,
         }
     }
 
@@ -248,16 +257,23 @@ impl Tokenizer {
                 Ok(())
             }
 
-            '#' => {
+            '+' => {
                 self.state = TokenizerState::Ready;
-                self.tokens.push(Token::Hash(self.cur_pos));
+                self.tokens.push(Token::Plus(self.cur_pos));
                 self.advance();
                 Ok(())
             }
 
-            '+' => {
+            '[' => {
                 self.state = TokenizerState::Ready;
-                self.tokens.push(Token::Plus(self.cur_pos));
+                self.tokens.push(Token::LeftBracket(self.cur_pos));
+                self.advance();
+                Ok(())
+            }
+
+            ']' => {
+                self.state = TokenizerState::Ready;
+                self.tokens.push(Token::RightBracket(self.cur_pos));
                 self.advance();
                 Ok(())
             }
