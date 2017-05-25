@@ -924,8 +924,26 @@ mod test {
     }
 
     #[test]
+    fn test_parse_direct_address() {
+        let tokens = tokens("[32h]");
+        let state = ParserState::new(&tokens);
+        let result = state.parse_operand();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().result, Operand::Direct(0x32));
+    }
+
+    #[test]
     fn test_parse_direct_bit() {
         let tokens = tokens("p5.6");
+        let state = ParserState::new(&tokens);
+        let result = state.parse_operand();
+        assert!(result.is_ok(), "{:?}", result.err().unwrap());
+        assert_eq!(result.unwrap().result, Operand::DirectBit(0xFE));
+    }
+
+    #[test]
+    fn test_parse_direct_bit_address() {
+        let tokens = tokens("[0F8h].6");
         let state = ParserState::new(&tokens);
         let result = state.parse_operand();
         assert!(result.is_ok(), "{:?}", result.err().unwrap());

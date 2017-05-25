@@ -328,7 +328,7 @@ impl Tokenizer {
                 Ok(())
             }
 
-            ' ' | '\t' | '\r' | '\n' | ',' | '+' | '-' | '*' | '/' | ';' => {
+            ' ' | '\t' | '\r' | '\n' | ',' | '+' | '-' | '*' | '/' | ';' | ']' => {
                 self.tokens
                     .push(Token::Number(v.into_iter().collect(), p));
                 self.state = TokenizerState::Ready;
@@ -583,9 +583,9 @@ mod tests {
 
     #[test]
     fn test_tokenize2() {
-        let text = "mov a, 20h\nret";
+        let text = "mov a, [20h]\nret";
         if let Ok(result) = Tokenizer::tokenize(text) {
-            assert_eq!(result.len(), 6);
+            assert_eq!(result.len(), 8);
 
             // mov
             if let Token::Operator(oper, pos) = result[0] {
@@ -613,30 +613,46 @@ mod tests {
                 panic!("result[2]: expected Comma, found {:?}", result[2]);
             }
 
-            // 20h
-            if let Token::Number(ref s, pos) = result[3] {
-                assert_eq!(s, "20h");
+            // [
+            if let Token::LeftBracket(pos) = result[3] {
                 assert_eq!(pos.row, 1);
                 assert_eq!(pos.column, 8);
             } else {
-                panic!("result[3]: expected Number, found {:?}", result[3]);
+                panic!("result[3]: expected LeftBracket, found {:?}", result[3]);
+            }
+
+            // 20h
+            if let Token::Number(ref s, pos) = result[4] {
+                assert_eq!(s, "20h");
+                assert_eq!(pos.row, 1);
+                assert_eq!(pos.column, 9);
+            } else {
+                panic!("result[4]: expected Number, found {:?}", result[4]);
+            }
+
+            // ]
+            if let Token::RightBracket(pos) = result[5] {
+                assert_eq!(pos.row, 1);
+                assert_eq!(pos.column, 12);
+            } else {
+                panic!("result[5]: expected RightBracket, found {:?}", result[5]);
             }
 
             // \n
-            if let Token::Newline(pos) = result[4] {
+            if let Token::Newline(pos) = result[6] {
                 assert_eq!(pos.row, 1);
-                assert_eq!(pos.column, 11);
+                assert_eq!(pos.column, 13);
             } else {
-                panic!("result[4]: expected Newline, found {:?}", result[4]);
+                panic!("result[6]: expected Newline, found {:?}", result[6]);
             }
 
             // ret
-            if let Token::Operator(oper, pos) = result[5] {
+            if let Token::Operator(oper, pos) = result[7] {
                 assert_eq!(oper, Operator::Ret);
                 assert_eq!(pos.row, 2);
                 assert_eq!(pos.column, 1);
             } else {
-                panic!("result[5]: expected Operator, found {:?}", result[5]);
+                panic!("result[7]: expected Operator, found {:?}", result[7]);
             }
         } else {
             panic!("Tokenization failed!");
