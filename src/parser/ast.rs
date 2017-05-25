@@ -845,7 +845,7 @@ mod test {
 
     #[test]
     fn test_immediate() {
-        let tokens = tokens("#0ABh");
+        let tokens = tokens("0ABh");
         let state = ParserState::new(&tokens);
         let result = state.parse_immediate();
         assert!(result.is_ok());
@@ -854,7 +854,7 @@ mod test {
 
     #[test]
     fn test_immediate_id() {
-        let tokens = tokens("#label");
+        let tokens = tokens("label");
         let state = ParserState::new(&tokens);
         let result = state.parse_immediate();
         assert!(result.is_ok());
@@ -929,7 +929,7 @@ mod test {
         let state = ParserState::new(&tokens);
         let result = state.parse_operand();
         assert!(result.is_ok(), "{:?}", result.err().unwrap());
-        assert_eq!(result.unwrap().result, Operand::Direct(0xFE));
+        assert_eq!(result.unwrap().result, Operand::DirectBit(0xFE));
     }
 
     #[test]
