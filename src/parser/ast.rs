@@ -467,11 +467,6 @@ impl<'a> ParserState<'a> {
             return res_indirect;
         }
 
-        let res_immediate = self.clone().parse_immediate();
-        if res_immediate.is_ok() {
-            return res_immediate;
-        }
-
         let res_register = self.clone().parse_register();
         if let Ok(result) = res_register {
             return Ok(ParseResult {
@@ -483,6 +478,11 @@ impl<'a> ParserState<'a> {
         let res_direct = self.clone().parse_direct();
         if res_direct.is_ok() {
             return res_direct;
+        }
+
+        let res_immediate = self.clone().parse_immediate();
+        if res_immediate.is_ok() {
+            return res_immediate;
         }
 
         let cur_tok = self.current_token()?;
